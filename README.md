@@ -275,8 +275,10 @@ FileQuantity=2
 | `MaximumFileSize` | Maximum size per log file in bytes (default: 16777216 / 16 MB) |
 | `FileQuantity` | Number of rotating log files to keep (default: 1) |
 
+## Acknowledgements
+
+This project is a fork of the [Arrow Flight SQL ODBC Driver](https://github.com/dremio/flightsql-odbc) originally created by [Dremio](https://www.dremio.com/). We are grateful to the Dremio developers and the open-source community for building a solid ODBC foundation on top of Apache Arrow Flight SQL. Thank you for making this work possible.
+
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
-
-This project is a fork of [Dremio's Arrow Flight SQL ODBC Driver](https://github.com/dremio/flightsql-odbc). See [NOTICE](NOTICE) for attribution.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details. See [NOTICE](NOTICE) for attribution.
