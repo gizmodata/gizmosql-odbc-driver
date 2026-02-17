@@ -58,9 +58,14 @@ if (NOT DEFINED MSVC)
 endif()
 find_package(OpenSSL REQUIRED)
 
-# OpenSSL depends on krb5 on CentOS
-if (UNIX)
-  list(APPEND OPENSSL_LIBRARIES krb5 k5crypto)
+# OpenSSL depends on krb5 on some Linux distros (e.g. CentOS/RHEL).
+# Only add if the libraries are actually available.
+if (UNIX AND NOT APPLE)
+  find_library(KRB5_LIB krb5)
+  find_library(K5CRYPTO_LIB k5crypto)
+  if (KRB5_LIB AND K5CRYPTO_LIB)
+    list(APPEND OPENSSL_LIBRARIES ${KRB5_LIB} ${K5CRYPTO_LIB})
+  endif()
 endif()
 
 # Add gRPC dependencies needed by Arrow Flight. Should be pre-installed.
@@ -130,6 +135,7 @@ else()
     -DCMAKE_DEPENDS_USE_COMPILER=FALSE
     -DOPENSSL_INCLUDE_DIR=${OPENSSL_INCLUDE_DIR}
     -DARROW_DEPENDENCY_SOURCE=AUTO
+    -DCMAKE_INSTALL_LIBDIR=lib
     -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-install
   )
 endif()
@@ -145,11 +151,7 @@ ExternalProject_Add(ApacheArrow
   CMAKE_ARGS ${ARROW_CMAKE_ARGS})
 
 include_directories(BEFORE ${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-install/include)
-IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-  set(ARROW_LIB_DIR lib64)
-else()
-  set(ARROW_LIB_DIR lib)
-endif()
+set(ARROW_LIB_DIR lib)
 link_directories(${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-install/${ARROW_LIB_DIR})
 
 if (MSVC)

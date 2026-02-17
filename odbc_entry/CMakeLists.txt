@@ -29,13 +29,8 @@ target_include_directories(gizmosql-odbc PRIVATE
 )
 
 # Add Arrow library directory so the linker can find static Arrow libs
-IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-    set(ODBC_ARROW_LIB_DIR lib64)
-else()
-    set(ODBC_ARROW_LIB_DIR lib)
-endif()
 target_link_directories(gizmosql-odbc PRIVATE
-    ${CMAKE_BINARY_DIR}/flight_sql/ApacheArrow-prefix/src/ApacheArrow-install/${ODBC_ARROW_LIB_DIR}
+    ${CMAKE_BINARY_DIR}/flight_sql/ApacheArrow-prefix/src/ApacheArrow-install/lib
 )
 
 # Link to internal static libraries (pulls in Arrow, gRPC, etc. transitively)
