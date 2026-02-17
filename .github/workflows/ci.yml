@@ -205,11 +205,41 @@ jobs:
 
       - name: Run integration tests with isql
         run: |
-          echo "=== Testing DSN connection with isql ==="
-          echo "SELECT 1 AS test_value;" | isql -v "GizmoSQL Test" 2>&1 || true
+          CONN="Driver=/tmp/libgizmosql-odbc.so;host=localhost;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false"
 
-          echo "=== Testing driver-level connection string ==="
-          echo "SELECT 42 AS answer;" | isql -v -k "Driver=/tmp/libgizmosql-odbc.so;host=localhost;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false" 2>&1 || true
+          echo "=== Test 1: Basic SELECT via DSN ==="
+          echo "SELECT 1 AS test_value;" | isql -v "GizmoSQL Test" 2>&1
+
+          echo "=== Test 2: Basic SELECT via connection string ==="
+          echo "SELECT 42 AS answer;" | isql -v -k "$CONN" 2>&1
+
+          echo "=== Test 3: DDL - CREATE TABLE (lazy fetch) ==="
+          echo "CREATE TABLE test_table (id INTEGER, name VARCHAR, value DOUBLE);" | isql -v -k "$CONN" 2>&1
+
+          echo "=== Test 4: DML - INSERT rows (lazy fetch) ==="
+          echo "INSERT INTO test_table VALUES (1, 'alice', 3.14);" | isql -v -k "$CONN" 2>&1
+          echo "INSERT INTO test_table VALUES (2, 'bob', 2.72);" | isql -v -k "$CONN" 2>&1
+          echo "INSERT INTO test_table VALUES (3, 'charlie', 1.41);" | isql -v -k "$CONN" 2>&1
+
+          echo "=== Test 5: SELECT inserted data ==="
+          echo "SELECT id, name, value FROM test_table ORDER BY id;" | isql -v -k "$CONN" 2>&1
+
+          echo "=== Test 6: DML - UPDATE (lazy fetch) ==="
+          echo "UPDATE test_table SET value = 9.99 WHERE id = 2;" | isql -v -k "$CONN" 2>&1
+
+          echo "=== Test 7: SELECT after UPDATE ==="
+          echo "SELECT id, name, value FROM test_table WHERE id = 2;" | isql -v -k "$CONN" 2>&1
+
+          echo "=== Test 8: DML - DELETE (lazy fetch) ==="
+          echo "DELETE FROM test_table WHERE id = 3;" | isql -v -k "$CONN" 2>&1
+
+          echo "=== Test 9: SELECT after DELETE ==="
+          echo "SELECT COUNT(*) AS row_count FROM test_table;" | isql -v -k "$CONN" 2>&1
+
+          echo "=== Test 10: DDL - DROP TABLE (lazy fetch) ==="
+          echo "DROP TABLE test_table;" | isql -v -k "$CONN" 2>&1
+
+          echo "=== All integration tests completed ==="
 
   sign-windows:
     needs: build-windows
