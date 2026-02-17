@@ -25,7 +25,12 @@ find_package(ZLIB REQUIRED)
 if (MSVC)
   set(Protobuf_USE_STATIC_LIBS ON)
 endif()
-find_package(Protobuf REQUIRED)
+# Use CONFIG mode first to avoid target conflicts with gRPC's protobuf dependency
+# (Homebrew protobuf >= 33.x defines upb targets that clash with CMake's FindProtobuf module)
+find_package(Protobuf CONFIG QUIET)
+if (NOT Protobuf_FOUND)
+  find_package(Protobuf REQUIRED)
+endif()
 
 # Add OpenSSL dependencies needed by Arrow Flight. Should be pre-installed.
 # On macOS with Homebrew, set OPENSSL_ROOT_DIR if not already defined.
