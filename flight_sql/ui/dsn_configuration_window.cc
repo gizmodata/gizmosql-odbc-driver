@@ -168,6 +168,7 @@ int DsnConfigurationWindow::CreateAuthSettingsGroup(int posX, int posY, int size
         "Authentication Type:", ChildId::AUTH_TYPE_COMBOBOX);
     authTypeComboBox->AddString("Basic Authentication");
     authTypeComboBox->AddString("Token Authentication");
+    authTypeComboBox->AddString("OAuth / External");
 
     rowPos += INTERVAL + ROW_HEIGHT;
 
@@ -195,7 +196,14 @@ int DsnConfigurationWindow::CreateAuthSettingsGroup(int posX, int posY, int size
     authTokenEdit->SetEnabled(false);
 
     // Ensure the right elements are selected.
-    authTypeComboBox->SetSelection(token.empty() ? 0 : 1);
+    const auto& authType = config.Get(FlightSqlConnection::AUTH_TYPE);
+    if (authType == "external") {
+        authTypeComboBox->SetSelection(2);
+    } else if (!token.empty()) {
+        authTypeComboBox->SetSelection(1);
+    } else {
+        authTypeComboBox->SetSelection(0);
+    }
     CheckAuthType();
 
     rowPos += INTERVAL + ROW_HEIGHT;
@@ -342,15 +350,20 @@ void DsnConfigurationWindow::CheckEnableOk() {
     bool enableOk = !nameEdit->IsTextEmpty();
     enableOk = enableOk && !serverEdit->IsTextEmpty();
     enableOk = enableOk && !portEdit->IsTextEmpty();
-    if (authTokenEdit->IsEnabled())
+
+    const int authSelection = authTypeComboBox->GetSelection();
+    if (1 == authSelection)
     {
+        // Token auth
         enableOk = enableOk && !authTokenEdit->IsTextEmpty();
     }
-    else
+    else if (0 == authSelection)
     {
+        // Basic auth
         enableOk = enableOk && !userEdit->IsTextEmpty();
         enableOk = enableOk && !passwordEdit->IsTextEmpty();
     }
+    // OAuth / External (selection == 2) requires no credential fields
 
     testButton->SetEnabled(enableOk);
     okButton->SetEnabled(enableOk);
@@ -381,17 +394,23 @@ void DsnConfigurationWindow::SaveParameters(Configuration& targetConfig)
         throw odbcabstraction::DriverException("Invalid port value.");
     }
 
-    if (0 == authTypeComboBox->GetSelection())
+    const int authSelection = authTypeComboBox->GetSelection();
+    if (0 == authSelection)
     {
         userEdit->GetText(text);
         targetConfig.Set(FlightSqlConnection::UID, text);
         passwordEdit->GetText(text);
         targetConfig.Set(FlightSqlConnection::PWD, text);
     }
-    else
+    else if (1 == authSelection)
     {
         authTokenEdit->GetText(text);
         targetConfig.Set(FlightSqlConnection::TOKEN, text);
+    }
+    else
+    {
+        // OAuth / External
+        targetConfig.Set(FlightSqlConnection::AUTH_TYPE, "external");
     }
 
     if (enableEncryptionCheckBox->IsChecked())
@@ -415,10 +434,13 @@ void DsnConfigurationWindow::SaveParameters(Configuration& targetConfig)
 }
 
 void DsnConfigurationWindow::CheckAuthType() {
-    const bool isBasic = COMMON_TAB == authTypeComboBox->GetSelection();
+    const int selection = authTypeComboBox->GetSelection();
+    const bool isBasic = (0 == selection);
+    const bool isToken = (1 == selection);
+    // selection == 2 is OAuth / External (no credential fields needed)
     userEdit->SetEnabled(isBasic);
     passwordEdit->SetEnabled(isBasic);
-    authTokenEdit->SetEnabled(!isBasic);
+    authTokenEdit->SetEnabled(isToken);
 }
 
 bool DsnConfigurationWindow::OnMessage(UINT msg, WPARAM wParam, LPARAM lParam)

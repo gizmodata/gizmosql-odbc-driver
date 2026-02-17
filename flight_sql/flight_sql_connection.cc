@@ -71,6 +71,7 @@ const std::string FlightSqlConnection::USE_EXTENDED_FLIGHTSQL_BUFFER = "UseExten
 const std::string FlightSqlConnection::USE_WIDE_CHAR = "UseWideChar";
 const std::string FlightSqlConnection::CHUNK_BUFFER_CAPACITY = "ChunkBufferCapacity";
 const std::string FlightSqlConnection::HIDE_SQL_TABLES_LISTING = "HideSQLTablesListing";
+const std::string FlightSqlConnection::AUTH_TYPE = "authType";
 const std::string FlightSqlConnection::SEND_PING_FRAME = "SendPingFrame";
 const std::string FlightSqlConnection::PING_FRAME_INTERVAL_MS = "PingFrameIntervalMilliseconds";
 const std::string FlightSqlConnection::PING_FRAME_TIMEOUT_MS = "PingFrameTimeoutMilliseconds";
@@ -82,7 +83,8 @@ const std::vector<std::string> FlightSqlConnection::ALL_KEYS = {
     FlightSqlConnection::USE_ENCRYPTION, FlightSqlConnection::TRUSTED_CERTS, FlightSqlConnection::USE_SYSTEM_TRUST_STORE,
     FlightSqlConnection::DISABLE_CERTIFICATE_VERIFICATION, FlightSqlConnection::STRING_COLUMN_LENGTH,
     FlightSqlConnection::USE_WIDE_CHAR, FlightSqlConnection::USE_EXTENDED_FLIGHTSQL_BUFFER, FlightSqlConnection::CHUNK_BUFFER_CAPACITY,
-    FlightSqlConnection::HIDE_SQL_TABLES_LISTING, FlightSqlConnection::SEND_PING_FRAME,
+    FlightSqlConnection::HIDE_SQL_TABLES_LISTING, FlightSqlConnection::AUTH_TYPE,
+    FlightSqlConnection::SEND_PING_FRAME,
     FlightSqlConnection::PING_FRAME_INTERVAL_MS, FlightSqlConnection::PING_FRAME_TIMEOUT_MS,
     FlightSqlConnection::MAX_PINGS_WITHOUT_DATA};
 
@@ -140,6 +142,7 @@ const std::set<std::string, odbcabstraction::CaseInsensitiveComparator> BUILT_IN
     FlightSqlConnection::STRING_COLUMN_LENGTH,
     FlightSqlConnection::USE_WIDE_CHAR,
     FlightSqlConnection::USE_EXTENDED_FLIGHTSQL_BUFFER,
+    FlightSqlConnection::AUTH_TYPE,
     FlightSqlConnection::SEND_PING_FRAME,
     FlightSqlConnection::PING_FRAME_INTERVAL_MS,
     FlightSqlConnection::PING_FRAME_TIMEOUT_MS,

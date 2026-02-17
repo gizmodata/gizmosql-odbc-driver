@@ -65,6 +65,7 @@ public:
   static const std::string USE_EXTENDED_FLIGHTSQL_BUFFER;
   static const std::string CHUNK_BUFFER_CAPACITY;
   static const std::string HIDE_SQL_TABLES_LISTING;
+  static const std::string AUTH_TYPE;
   static const std::string SEND_PING_FRAME;
   static const std::string PING_FRAME_INTERVAL_MS;
   static const std::string PING_FRAME_TIMEOUT_MS;

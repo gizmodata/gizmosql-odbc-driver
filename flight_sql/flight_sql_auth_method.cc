@@ -11,12 +11,24 @@
 
 #include "flight_sql_connection.h"
 #include <odbcabstraction/exceptions.h>
+#include <odbcabstraction/logger.h>
 
 #include <arrow/flight/client.h>
 #include <arrow/result.h>
 #include <arrow/status.h>
 
+#include <chrono>
+#include <thread>
 #include <utility>
+
+#if defined(__APPLE__)
+#include <cstdlib>
+#elif defined(_WIN32) || defined(_WIN64)
+#include <Windows.h>
+#include <shellapi.h>
+#else
+#include <cstdlib>
+#endif
 
 using namespace driver::flight_sql;
 
@@ -137,6 +149,27 @@ std::unique_ptr<FlightSqlAuthMethod> FlightSqlAuthMethod::FromProperties(
     const std::unique_ptr<FlightClient> &client,
     const Connection::ConnPropertyMap &properties) {
 
+  // Check if authType=external is set for OAuth
+  auto it_auth_type = properties.find(FlightSqlConnection::AUTH_TYPE);
+  if (it_auth_type != properties.end() && it_auth_type->second == "external") {
+    auto it_host = properties.find(FlightSqlConnection::HOST);
+    auto it_port = properties.find(FlightSqlConnection::PORT);
+    const std::string &host = it_host != properties.end() ? it_host->second : "localhost";
+    int port = it_port != properties.end() ? std::stoi(it_port->second) : 32010;
+
+    auto it_encryption = properties.find(FlightSqlConnection::USE_ENCRYPTION);
+    bool use_encryption = true;
+    if (it_encryption != properties.end()) {
+      auto val = odbcabstraction::AsBool(it_encryption->second);
+      if (val) {
+        use_encryption = *val;
+      }
+    }
+
+    return std::unique_ptr<FlightSqlAuthMethod>(
+        new OAuthAuthMethod(*client, host, port, use_encryption));
+  }
+
   // Check if should use user-password authentication
   auto it_user = properties.find(FlightSqlConnection::USER);
   if (it_user == properties.end()) {
@@ -173,6 +206,116 @@ std::unique_ptr<FlightSqlAuthMethod> FlightSqlAuthMethod::FromProperties(
   }
 
   return std::unique_ptr<FlightSqlAuthMethod>(new NoOpAuthMethod);
+}
+
+// --- OAuthAuthMethod implementation ---
+
+OAuthAuthMethod::OAuthAuthMethod(FlightClient &client,
+                                 const std::string &host, int port,
+                                 bool use_encryption)
+    : client_(client), host_(host), port_(port),
+      use_encryption_(use_encryption) {}
+
+void OAuthAuthMethod::Authenticate(FlightSqlConnection &connection,
+                                   FlightCallOptions &call_options) {
+  // Step 1: Discover OAuth endpoint from the server
+  std::string oauth_url = Discover(connection, call_options);
+
+  LOG_INFO("OAuth discovery returned URL, launching browser for authentication.");
+
+  // Step 2: Open browser for user to authenticate
+  LaunchBrowser(oauth_url);
+
+  // Step 3: Wait for the server to provide a bearer token
+  std::string bearer_token = WaitForToken(connection, call_options);
+
+  // Step 4: Set the bearer token on subsequent calls
+  const std::pair<std::string, std::string> token_header(
+      "authorization", "Bearer " + bearer_token);
+  call_options.headers.push_back(token_header);
+}
+
+std::string OAuthAuthMethod::Discover(FlightSqlConnection &connection,
+                                      FlightCallOptions &call_options) {
+  // Send a basic auth handshake with username=__discover__ to trigger
+  // the server's OAuth discovery response.
+  FlightCallOptions discover_options;
+
+  const boost::optional<Connection::Attribute> &login_timeout =
+      connection.GetAttribute(Connection::LOGIN_TIMEOUT);
+  if (login_timeout && boost::get<uint32_t>(*login_timeout) > 0) {
+    double timeout_seconds =
+        static_cast<double>(boost::get<uint32_t>(*login_timeout));
+    if (timeout_seconds > 0) {
+      discover_options.timeout = TimeoutDuration{timeout_seconds};
+    }
+  }
+
+  Result<std::pair<std::string, std::string>> bearer_result =
+      client_.AuthenticateBasicToken(discover_options, "__discover__", "");
+
+  if (!bearer_result.ok()) {
+    const auto &flightStatus =
+        arrow::flight::FlightStatusDetail::UnwrapStatus(
+            bearer_result.status());
+    if (flightStatus != nullptr &&
+        flightStatus->code() ==
+            arrow::flight::FlightStatusCode::Unauthenticated) {
+      // The server should return the OAuth URL in the error detail or
+      // extra info field when it sees __discover__.
+      std::string extra = flightStatus->extra_info();
+      if (!extra.empty()) {
+        return extra;
+      }
+    }
+    throw AuthenticationException(
+        "OAuth discovery failed: " + bearer_result.status().ToString());
+  }
+
+  // If the server responded with a bearer token directly (which contains the
+  // OAuth URL), extract it from the authorization header value.
+  const auto &header_pair = bearer_result.ValueOrDie();
+  return header_pair.second;
+}
+
+void OAuthAuthMethod::LaunchBrowser(const std::string &url) {
+#if defined(__APPLE__)
+  std::string command = "open \"" + url + "\"";
+  system(command.c_str());
+#elif defined(_WIN32) || defined(_WIN64)
+  ShellExecuteA(NULL, "open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+#else
+  std::string command = "xdg-open \"" + url + "\"";
+  system(command.c_str());
+#endif
+}
+
+std::string OAuthAuthMethod::WaitForToken(FlightSqlConnection &connection,
+                                          FlightCallOptions &call_options) {
+  // Poll the server by re-authenticating with __discover__ until we receive
+  // a valid bearer token (the server issues one after the user completes
+  // the browser-based OAuth flow).
+  const int max_attempts = 120; // 2 minutes at 1-second intervals
+  const auto poll_interval = std::chrono::seconds(1);
+
+  for (int attempt = 0; attempt < max_attempts; ++attempt) {
+    std::this_thread::sleep_for(poll_interval);
+
+    FlightCallOptions poll_options;
+    Result<std::pair<std::string, std::string>> result =
+        client_.AuthenticateBasicToken(poll_options, "__discover__", "");
+
+    if (result.ok()) {
+      const auto &header_pair = result.ValueOrDie();
+      if (!header_pair.second.empty()) {
+        LOG_INFO("OAuth token received successfully.");
+        return header_pair.second;
+      }
+    }
+  }
+
+  throw AuthenticationException(
+      "OAuth authentication timed out waiting for browser login.");
 }
 
 } // namespace flight_sql

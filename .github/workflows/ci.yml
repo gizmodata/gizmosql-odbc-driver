@@ -1,0 +1,348 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    name: Build Linux (${{ matrix.arch }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            libboost-all-dev \
+            libiodbc2-dev \
+            libgrpc++-dev \
+            libprotobuf-dev \
+            protobuf-compiler-grpc \
+            libssl-dev \
+            rapidjson-dev
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libgizmosql-odbc-linux-${{ matrix.arch }}.so
+          path: build/*/lib/libgizmosql*.so
+          if-no-files-found: error
+
+  build-macos:
+    runs-on: macos-latest
+    name: Build macOS (arm64)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install cmake boost libiodbc grpc protobuf openssl@3 rapidjson
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel $(sysctl -n hw.ncpu)
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libgizmosql-odbc-macos-arm64.dylib
+          path: build/*/lib/libgizmosql*.dylib
+          if-no-files-found: error
+
+  build-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            triplet: x64-windows
+            cmake_arch: x64
+          - arch: arm64
+            triplet: arm64-windows
+            cmake_arch: ARM64
+    runs-on: windows-latest
+    name: Build Windows (${{ matrix.arch }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up vcpkg
+        run: |
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install --triplet ${{ matrix.triplet }} --x-install-root="$env:VCPKG_INSTALLATION_ROOT\installed"
+
+      - name: Configure
+        run: |
+          cmake -B build `
+            -DARROW_GIT_REPOSITORY=https://github.com/apache/arrow.git `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
+            -DVCPKG_MANIFEST_MODE=OFF `
+            -G "Visual Studio 17 2022" `
+            -A ${{ matrix.cmake_arch }} `
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel 8 --config Release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gizmosql-odbc-windows-${{ matrix.arch }}.dll
+          path: build/Release/**/*.dll
+          if-no-files-found: error
+
+  sign-windows:
+    needs: build-windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    runs-on: windows-latest
+    name: Sign Windows (${{ matrix.arch }})
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: gizmosql-odbc-windows-${{ matrix.arch }}.dll
+          path: unsigned
+
+      - name: Azure login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install AzureSignTool
+        run: dotnet tool install --global AzureSignTool
+
+      - name: Sign DLLs
+        run: |
+          Get-ChildItem -Path unsigned -Filter *.dll -Recurse | ForEach-Object {
+            AzureSignTool sign `
+              --azure-key-vault-url "${{ secrets.AZURE_KEY_VAULT_URI }}" `
+              --azure-key-vault-certificate "${{ secrets.AZURE_CERT_NAME }}" `
+              --azure-key-vault-managed-identity `
+              --timestamp-rfc3161 http://timestamp.digicert.com `
+              --timestamp-digest sha256 `
+              --file-digest sha256 `
+              --verbose `
+              $_.FullName
+          }
+
+      - name: Upload signed artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gizmosql-odbc-windows-${{ matrix.arch }}-signed.dll
+          path: unsigned/**/*.dll
+          if-no-files-found: error
+
+  release:
+    needs: [build-linux, build-macos, build-windows, sign-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    name: Release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Organize release assets
+        run: |
+          mkdir -p release
+          # Linux artifacts
+          find artifacts -name "libgizmosql*linux*x64*" -exec cp {} release/libgizmosql-odbc-linux-x64.so \;
+          find artifacts -name "libgizmosql*linux*arm64*" -exec cp {} release/libgizmosql-odbc-linux-arm64.so \;
+          # macOS artifact
+          find artifacts -name "libgizmosql*macos*" -exec cp {} release/libgizmosql-odbc-macos-arm64.dylib \;
+          # Windows signed artifacts (prefer signed over unsigned)
+          find artifacts -name "*windows*x64*signed*/*.dll" -exec cp {} release/gizmosql-odbc-windows-x64.dll \; 2>/dev/null || \
+            find artifacts -name "*windows*x64*/*.dll" -exec cp {} release/gizmosql-odbc-windows-x64.dll \;
+          find artifacts -name "*windows*arm64*signed*/*.dll" -exec cp {} release/gizmosql-odbc-windows-arm64.dll \; 2>/dev/null || \
+            find artifacts -name "*windows*arm64*/*.dll" -exec cp {} release/gizmosql-odbc-windows-arm64.dll \;
+
+      - name: Generate build provenance attestations
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release/*
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            release/*
+
+  update-homebrew:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    name: Update Homebrew Tap
+    steps:
+      - name: Generate formula
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          BASE_URL="https://github.com/gizmodata/gizmosql-odbc-driver/releases/download/${TAG}"
+
+          # Download artifacts and compute sha256 hashes
+          curl -sL -o macos-arm64.dylib "${BASE_URL}/libgizmosql-odbc-macos-arm64.dylib"
+          MACOS_ARM64_SHA256=$(sha256sum macos-arm64.dylib | awk '{print $1}')
+
+          curl -sL -o linux-x64.so "${BASE_URL}/libgizmosql-odbc-linux-x64.so"
+          LINUX_X64_SHA256=$(sha256sum linux-x64.so | awk '{print $1}')
+
+          curl -sL -o linux-arm64.so "${BASE_URL}/libgizmosql-odbc-linux-arm64.so"
+          LINUX_ARM64_SHA256=$(sha256sum linux-arm64.so | awk '{print $1}')
+
+          cat > gizmosql-odbc.rb << FORMULA_EOF
+          # typed: false
+          # frozen_string_literal: true
+
+          class GizmosqlOdbc < Formula
+            desc "GizmoSQL ODBC Driver"
+            homepage "https://gizmodata.com/gizmosql"
+            version "${VERSION}"
+            license "Apache-2.0"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "${BASE_URL}/libgizmosql-odbc-macos-arm64.dylib"
+                sha256 "${MACOS_ARM64_SHA256}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "${BASE_URL}/libgizmosql-odbc-linux-arm64.so"
+                sha256 "${LINUX_ARM64_SHA256}"
+              elsif Hardware::CPU.intel?
+                url "${BASE_URL}/libgizmosql-odbc-linux-x64.so"
+                sha256 "${LINUX_X64_SHA256}"
+              end
+            end
+
+            def install
+              if OS.mac?
+                lib.install "libgizmosql-odbc-macos-arm64.dylib" => "libgizmosql-odbc.dylib"
+              elsif OS.linux?
+                if Hardware::CPU.arm?
+                  lib.install "libgizmosql-odbc-linux-arm64.so" => "libgizmosql-odbc.so"
+                else
+                  lib.install "libgizmosql-odbc-linux-x64.so" => "libgizmosql-odbc.so"
+                end
+              end
+            end
+
+            def caveats
+              if OS.mac?
+                <<~EOS
+                  To register the driver, add the following to /usr/local/etc/odbcinst.ini:
+
+                    [GizmoSQL ODBC Driver]
+                    Driver = #{lib}/libgizmosql-odbc.dylib
+
+                  Then add a DSN to ~/.odbc.ini:
+
+                    [GizmoSQL]
+                    Driver        = GizmoSQL ODBC Driver
+                    host          = localhost
+                    port          = 32010
+                    uid           = your-username
+                    pwd           = your-password
+                    useEncryption = true
+                EOS
+              else
+                <<~EOS
+                  To register the driver, add the following to /etc/odbcinst.ini:
+
+                    [GizmoSQL ODBC Driver]
+                    Driver = #{lib}/libgizmosql-odbc.so
+
+                  Then add a DSN to ~/.odbc.ini:
+
+                    [GizmoSQL]
+                    Driver        = GizmoSQL ODBC Driver
+                    host          = localhost
+                    port          = 32010
+                    uid           = your-username
+                    pwd           = your-password
+                    useEncryption = true
+                EOS
+              end
+            end
+
+            test do
+              if OS.mac?
+                assert_predicate lib/"libgizmosql-odbc.dylib", :exist?
+              else
+                assert_predicate lib/"libgizmosql-odbc.so", :exist?
+              end
+            end
+          end
+          FORMULA_EOF
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' gizmosql-odbc.rb
+
+      - name: Update tap repository
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/gizmodata/homebrew-tap.git"
+          cp gizmosql-odbc.rb homebrew-tap/Formula/gizmosql-odbc.rb
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/gizmosql-odbc.rb
+          git commit -m "Update gizmosql-odbc to ${TAG}"
+          git push
