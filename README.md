@@ -49,6 +49,9 @@ port       = 32010
 uid        = your-username
 pwd        = your-password
 useEncryption = true
+
+# For local development with self-signed certificates:
+# disableCertificateVerification = true
 ```
 
 ### Linux (x64 / arm64)
@@ -80,6 +83,9 @@ port       = 32010
 uid        = your-username
 pwd        = your-password
 useEncryption = true
+
+# For local development with self-signed certificates:
+# disableCertificateVerification = true
 ```
 
 ### Windows (x64 / arm64)
