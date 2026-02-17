@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Dremio Corporation
+ * Copyright (C) 2026 GizmoData LLC
  *
  * See "LICENSE" for license information.
  */
@@ -42,7 +43,7 @@ namespace flight_sql {
 namespace config {
 
 DsnConfigurationWindow::DsnConfigurationWindow(Window* parent, config::Configuration& config) :
-    CustomWindow(parent, "FlightConfigureDSN", "Configure Apache Arrow Flight SQL"),
+    CustomWindow(parent, "GizmoSQLConfigureDSN", "Configure GizmoSQL ODBC"),
     width(480),
     height(375),
     config(config),

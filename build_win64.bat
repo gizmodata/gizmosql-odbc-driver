@@ -1,5 +1,6 @@
 @rem
 @rem Copyright (C) 2020-2022 Dremio Corporation
+@rem Copyright (C) 2026 GizmoData LLC
 @rem
 @rem See "LICENSE" for license information.
 @rem

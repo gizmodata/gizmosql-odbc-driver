@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Dremio Corporation
+ * Copyright (C) 2026 GizmoData LLC
  *
  * See "LICENSE" for license information.
  */
@@ -17,7 +18,7 @@ namespace driver {
 namespace flight_sql {
 namespace config {
 
-static const std::string DEFAULT_DSN = "Apache Arrow Flight SQL";
+static const std::string DEFAULT_DSN = "GizmoSQL";
 static const std::string DEFAULT_ENABLE_ENCRYPTION = TRUE_STR;
 static const std::string DEFAULT_USE_CERT_STORE = TRUE_STR;
 static const std::string DEFAULT_DISABLE_CERT_VERIFICATION = FALSE_STR;

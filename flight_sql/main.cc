@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Dremio Corporation
+ * Copyright (C) 2026 GizmoData LLC
  *
  * See "LICENSE" for license information.
  */
@@ -33,7 +34,7 @@ using driver::odbcabstraction::Statement;
 void TestBindColumn(const std::shared_ptr<Connection> &connection) {
   const std::shared_ptr<Statement> &statement = connection->CreateStatement();
   statement->Execute(
-      "SELECT IncidntNum, Category FROM \"@dremio\".Test LIMIT 10");
+      "SELECT 1");
 
   const std::shared_ptr<ResultSet> &result_set = statement->GetResultSet();
 
@@ -89,15 +90,7 @@ void TestGetData(const std::shared_ptr<Connection> &connection) {
 void TestBindColumnBigInt(const std::shared_ptr<Connection> &connection) {
   const std::shared_ptr<Statement> &statement = connection->CreateStatement();
   statement->Execute(
-      "SELECT IncidntNum, CAST(\"IncidntNum\" AS DOUBLE) / 100 AS "
-      "double_field, Category\n"
-      "FROM (\n"
-      "  SELECT CONVERT_TO_INTEGER(IncidntNum, 1, 1, 0) AS IncidntNum, "
-      "Category\n"
-      "  FROM (\n"
-      "    SELECT IncidntNum, Category FROM \"@dremio\".Test LIMIT 10\n"
-      "  ) nested_0\n"
-      ") nested_0");
+      "SELECT 1");
 
   const std::shared_ptr<ResultSet> &result_set = statement->GetResultSet();
 
@@ -195,10 +188,10 @@ int main() {
       driver.CreateConnection(driver::odbcabstraction::V_3);
 
   Connection::ConnPropertyMap properties = {
-      {FlightSqlConnection::HOST, std::string("automaster.drem.io")},
+      {FlightSqlConnection::HOST, std::string("localhost")},
       {FlightSqlConnection::PORT, std::string("32010")},
-      {FlightSqlConnection::USER, std::string("dremio")},
-      {FlightSqlConnection::PASSWORD, std::string("dremio123")},
+      {FlightSqlConnection::USER, std::string("gizmosql_user")},
+      {FlightSqlConnection::PASSWORD, std::string("gizmosql_password")},
       {FlightSqlConnection::USE_ENCRYPTION, std::string("false")},
   };
   std::vector<std::string> missing_attr;

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Dremio Corporation
+ * Copyright (C) 2026 GizmoData LLC
  *
  * See "LICENSE" for license information.
  */
@@ -88,7 +89,7 @@ Transform_inner(const odbcabstraction::OdbcVersion odbc_version,
     const std::shared_ptr<Schema> &schema = reader.GetSchema();
     if (schema == nullptr) {
       // TODO: Remove this if after fixing TODO on GetTablesReader::GetSchema()
-      // This is because of a problem on Dremio server, where complex types columns
+      // This is because of a problem on the server, where complex types columns
       // are being returned without the children types, so we are simply ignoring
       // it by now.
       continue;

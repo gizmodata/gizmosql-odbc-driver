@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Dremio Corporation
+ * Copyright (C) 2026 GizmoData LLC
  *
  * See "LICENSE" for license information.
  */
@@ -504,7 +505,7 @@ Connection::Info FlightSqlConnection::GetInfo(uint16_t info_type) {
 }
 
 FlightSqlConnection::FlightSqlConnection(OdbcVersion odbc_version, const std::string &driver_version)
-    : diagnostics_("Apache Arrow", "Flight SQL", odbc_version),
+    : diagnostics_("GizmoData", "GizmoSQL", odbc_version),
       odbc_version_(odbc_version), info_(call_options_, sql_client_, driver_version),
       closed_(true) {
   attribute_[CONNECTION_DEAD] = static_cast<uint32_t>(SQL_TRUE);

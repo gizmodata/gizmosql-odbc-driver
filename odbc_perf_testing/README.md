@@ -7,13 +7,13 @@
 ### test_case=test-fetch-all
 
 ```
-./main.py  --sql_query="SELECT * FROM table_name" py --driver /home/user/odbc_driver/_build/release/libarrow-odbc.so --host localhost --port 32010 --user username --password password123 pyodbc test-fetch-all
+./main.py  --sql_query="SELECT * FROM table_name" py --driver /home/user/odbc_driver/_build/release/libgizmosql-odbc.so --host localhost --port 32010 --user username --password password123 pyodbc test-fetch-all
 ```
 
 ### test_case=test-sql-type-*<type_name>*
 
 ```
-./main.py --driver /home/user/odbc_driver/_build/release/libarrow-odbc.so --host localhost --port 32010 --user username --password password123 pyodbc test-sql-type-all
+./main.py --driver /home/user/odbc_driver/_build/release/libgizmosql-odbc.so --host localhost --port 32010 --user username --password password123 pyodbc test-sql-type-all
 ```
 
 #### Available data types: boolean, float, double, decimal, int, bigint, date, time, timestamp, intervalday (day to seconds), intervalyear (year to month), varchar, struct, list, all

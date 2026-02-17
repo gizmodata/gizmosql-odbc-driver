@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Dremio Corporation
+ * Copyright (C) 2026 GizmoData LLC
  *
  * See "LICENSE" for license information.
  */
@@ -56,7 +57,7 @@ FlightSqlStatement::FlightSqlStatement(
     FlightSqlClient &sql_client,
     FlightCallOptions call_options,
     const odbcabstraction::MetadataSettings& metadata_settings)
-    : diagnostics_("Apache Arrow", diagnostics.GetDataSourceComponent(), diagnostics.GetOdbcVersion()),
+    : diagnostics_("GizmoData", diagnostics.GetDataSourceComponent(), diagnostics.GetOdbcVersion()),
       sql_client_(sql_client), call_options_(std::move(call_options)), metadata_settings_(metadata_settings) {
   attribute_[METADATA_ID] = static_cast<size_t>(SQL_FALSE);
   attribute_[MAX_LENGTH] = static_cast<size_t>(0);

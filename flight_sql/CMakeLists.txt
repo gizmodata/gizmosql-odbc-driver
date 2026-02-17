@@ -1,4 +1,5 @@
 # Copyright (C) 2020-2022 Dremio Corporation
+# Copyright (C) 2026 GizmoData LLC
 #
 # See "LICENSE" for license information.
 #
@@ -135,7 +136,7 @@ endif()
 
 enable_testing()
 
-set(ARROW_ODBC_SPI_SOURCES
+set(GIZMOSQL_ODBC_SPI_SOURCES
   include/flight_sql/flight_sql_driver.h
   accessors/binary_array_accessor.cc
   accessors/binary_array_accessor.h
@@ -201,7 +202,7 @@ set(ARROW_ODBC_SPI_SOURCES
 if (WIN32)
     include_directories(flight_sql/include)
 
-    list(APPEND ARROW_ODBC_SPI_SOURCES
+    list(APPEND GIZMOSQL_ODBC_SPI_SOURCES
      include/flight_sql/config/configuration.h
      include/flight_sql/config/connection_string_parser.h
      include/flight_sql/ui/add_property_window.h
@@ -234,7 +235,7 @@ else()
   )
 endif()
 
-set(ARROW_ODBC_SPI_THIRDPARTY_LIBS
+set(GIZMOSQL_ODBC_SPI_THIRDPARTY_LIBS
   ${ARROW_LIBS}
   gRPC::grpc++
   ${ZLIB_LIBRARIES}
@@ -245,14 +246,14 @@ set(ARROW_ODBC_SPI_THIRDPARTY_LIBS
 
 if (MSVC)
   find_package(Boost REQUIRED COMPONENTS locale)
-  list(APPEND ARROW_ODBC_SPI_THIRDPARTY_LIBS ${Boost_LIBRARIES})
+  list(APPEND GIZMOSQL_ODBC_SPI_THIRDPARTY_LIBS ${Boost_LIBRARIES})
 endif()
 
-add_library(arrow_odbc_spi_impl ${ARROW_ODBC_SPI_SOURCES})
+add_library(gizmosql_odbc_spi_impl ${GIZMOSQL_ODBC_SPI_SOURCES})
 
-add_dependencies(arrow_odbc_spi_impl ApacheArrow)
+add_dependencies(gizmosql_odbc_spi_impl ApacheArrow)
 
-set_target_properties(arrow_odbc_spi_impl
+set_target_properties(gizmosql_odbc_spi_impl
   PROPERTIES
   ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/$<CONFIG>/lib
   LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/$<CONFIG>/lib
@@ -260,21 +261,21 @@ set_target_properties(arrow_odbc_spi_impl
 )
 
 target_link_libraries(
-    arrow_odbc_spi_impl 
+    gizmosql_odbc_spi_impl 
     odbcabstraction 
-    ${ARROW_ODBC_SPI_THIRDPARTY_LIBS})
-target_include_directories(arrow_odbc_spi_impl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    ${GIZMOSQL_ODBC_SPI_THIRDPARTY_LIBS})
+target_include_directories(gizmosql_odbc_spi_impl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # CLI
-add_executable(arrow_odbc_spi_impl_cli main.cc)
-set_target_properties(arrow_odbc_spi_impl_cli
+add_executable(gizmosql_odbc_spi_impl_cli main.cc)
+set_target_properties(gizmosql_odbc_spi_impl_cli
   PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/$<CONFIG>/bin
 )
-target_link_libraries(arrow_odbc_spi_impl_cli arrow_odbc_spi_impl)
+target_link_libraries(gizmosql_odbc_spi_impl_cli gizmosql_odbc_spi_impl)
 
 # Unit tests
-set(ARROW_ODBC_SPI_TEST_SOURCES
+set(GIZMOSQL_ODBC_SPI_TEST_SOURCES
   accessors/boolean_array_accessor_test.cc
   accessors/binary_array_accessor_test.cc
   accessors/date_array_accessor_test.cc
@@ -290,23 +291,23 @@ set(ARROW_ODBC_SPI_TEST_SOURCES
   utils_test.cc
 )
 
-add_executable(arrow_odbc_spi_impl_test ${ARROW_ODBC_SPI_TEST_SOURCES})
+add_executable(gizmosql_odbc_spi_impl_test ${GIZMOSQL_ODBC_SPI_TEST_SOURCES})
 
-add_dependencies(arrow_odbc_spi_impl_test ApacheArrow)
+add_dependencies(gizmosql_odbc_spi_impl_test ApacheArrow)
 
-set_target_properties(arrow_odbc_spi_impl_test
+set_target_properties(gizmosql_odbc_spi_impl_test
   PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/test/$<CONFIG>/bin
 )
-target_link_libraries(arrow_odbc_spi_impl_test
-        arrow_odbc_spi_impl
+target_link_libraries(gizmosql_odbc_spi_impl_test
+        gizmosql_odbc_spi_impl
         gtest gtest_main)
-add_test(connection_test arrow_odbc_spi_impl_test)
-add_test(transformer_test arrow_odbc_spi_impl_test)
+add_test(connection_test gizmosql_odbc_spi_impl_test)
+add_test(transformer_test gizmosql_odbc_spi_impl_test)
 
 add_custom_command(
-     TARGET arrow_odbc_spi_impl_test
+     TARGET gizmosql_odbc_spi_impl_test
      COMMENT "Run tests"
      POST_BUILD 
-     COMMAND ${CMAKE_BINARY_DIR}/test/$<CONFIG>/bin/arrow_odbc_spi_impl_test
+     COMMAND ${CMAKE_BINARY_DIR}/test/$<CONFIG>/bin/gizmosql_odbc_spi_impl_test
 )

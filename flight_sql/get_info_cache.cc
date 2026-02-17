@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Dremio Corporation
+ * Copyright (C) 2026 GizmoData LLC
  *
  * See "LICENSE" for license information.
  */
@@ -197,7 +198,7 @@ GetInfoCache::GetInfoCache(FlightCallOptions &call_options,
                            std::unique_ptr<FlightSqlClient> &client, const std::string &driver_version)
     : call_options_(call_options), sql_client_(client),
       has_server_info_(false) {
-  info_[SQL_DRIVER_NAME] = "Arrow Flight ODBC Driver";
+  info_[SQL_DRIVER_NAME] = "GizmoSQL ODBC Driver";
   info_[SQL_DRIVER_VER] = ConvertToDBMSVer(driver_version);
 
   info_[SQL_GETDATA_EXTENSIONS] =
@@ -1183,13 +1184,13 @@ void GetInfoCache::LoadDefaultsForMissingEntries() {
   SetDefaultIfMissing(info_, SQL_CURSOR_SENSITIVITY,
                       static_cast<uint32_t>(SQL_UNSPECIFIED));
   SetDefaultIfMissing(info_, SQL_DATA_SOURCE_READ_ONLY, "N");
-  SetDefaultIfMissing(info_, SQL_DBMS_NAME, "Arrow Flight SQL Server");
+  SetDefaultIfMissing(info_, SQL_DBMS_NAME, "GizmoSQL");
   SetDefaultIfMissing(info_, SQL_DBMS_VER, "00.01.0000");
   SetDefaultIfMissing(info_, SQL_DDL_INDEX, static_cast<uint32_t>(0));
   SetDefaultIfMissing(info_, SQL_DEFAULT_TXN_ISOLATION,
                       static_cast<uint32_t>(0));
   SetDefaultIfMissing(info_, SQL_DESCRIBE_PARAMETER, "N");
-  SetDefaultIfMissing(info_, SQL_DRIVER_NAME, "Arrow Flight SQL Driver");
+  SetDefaultIfMissing(info_, SQL_DRIVER_NAME, "GizmoSQL ODBC Driver");
   SetDefaultIfMissing(info_, SQL_DRIVER_ODBC_VER, "03.80");
   SetDefaultIfMissing(info_, SQL_DRIVER_VER, "00.09.0000");
   SetDefaultIfMissing(info_, SQL_DROP_ASSERTION, static_cast<uint32_t>(0));
@@ -1274,7 +1275,7 @@ void GetInfoCache::LoadDefaultsForMissingEntries() {
                       static_cast<uint32_t>(SQL_SU_DML_STATEMENTS));
   SetDefaultIfMissing(info_, SQL_SEARCH_PATTERN_ESCAPE, "\\");
   SetDefaultIfMissing(info_, SQL_SERVER_NAME,
-                      "Arrow Flight SQL Server"); // This might actually need to be the hostname.
+                      "GizmoSQL"); // This might actually need to be the hostname.
   SetDefaultIfMissing(info_, SQL_SQL_CONFORMANCE,
                       static_cast<uint32_t>(SQL_SC_SQL92_ENTRY));
   SetDefaultIfMissing(info_, SQL_SQL92_DATETIME_FUNCTIONS,

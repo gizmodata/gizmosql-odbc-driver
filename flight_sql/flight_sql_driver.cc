@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Dremio Corporation
+ * Copyright (C) 2026 GizmoData LLC
  *
  * See "LICENSE" for license information.
  */
@@ -12,7 +13,7 @@
 
 
 #define DEFAULT_MAXIMUM_FILE_SIZE 16777216
-#define CONFIG_FILE_NAME "arrow-odbc.ini"
+#define CONFIG_FILE_NAME "gizmosql-odbc.ini"
 
 namespace driver {
 namespace flight_sql {
@@ -42,7 +43,7 @@ namespace {
 }
 
 FlightSqlDriver::FlightSqlDriver()
-    : diagnostics_("Apache Arrow", "Flight SQL", OdbcVersion::V_3),
+    : diagnostics_("GizmoData", "GizmoSQL", OdbcVersion::V_3),
       version_("0.9.0.0")
 {}
 

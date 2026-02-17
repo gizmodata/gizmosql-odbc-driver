@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Dremio Corporation
+ * Copyright (C) 2026 GizmoData LLC
  *
  * See "LICENSE" for license information.
  */
@@ -73,7 +74,7 @@ std::shared_ptr<Schema> GetTablesReader::GetSchema() {
   const Result<std::shared_ptr<Schema>> &result =
       ReadSchema(&dataset_schema_reader, &in_memo);
   if (!result.ok()) {
-    // TODO: Ignoring this error until we fix the problem on Dremio server
+    // TODO: Ignoring this error until we fix the problem on the server
     // The problem is that complex types columns are being returned without the children types.
     return nullptr;
   }

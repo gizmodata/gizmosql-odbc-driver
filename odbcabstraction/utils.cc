@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2022 Dremio Corporation
+ * Copyright (C) 2026 GizmoData LLC
  *
  * See "LICENSE" for license information.
  */
@@ -75,7 +76,7 @@ void ReadConfigFile(PropertyMap &properties, const std::string &config_file_name
   config_file.open(config_file_path);
 
   if (config_file.fail()) {
-    auto error_msg = "Arrow Flight SQL ODBC driver config file not found on \"" + config_file_path +  "\"";
+    auto error_msg = "GizmoSQL ODBC driver config file not found on \"" + config_file_path +  "\"";
     std::cerr << error_msg << std::endl;
 
     throw DriverException(error_msg);

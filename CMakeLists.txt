@@ -1,4 +1,5 @@
 # Copyright (C) 2020-2022 Dremio Corporation
+# Copyright (C) 2026 GizmoData LLC
 #
 # See "LICENSE" for license information.
 #
@@ -6,7 +7,7 @@
 cmake_minimum_required(VERSION 3.11)
 set(CMAKE_CXX_STANDARD 11)
 
-project(flightsql_odbc)
+project(gizmosql_odbc)
 
 # Add Boost dependencies. Should be pre-installed (Brew on Mac).
 find_package(Boost REQUIRED)

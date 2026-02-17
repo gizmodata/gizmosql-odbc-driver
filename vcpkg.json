@@ -1,5 +1,5 @@
 {
-  "name": "flightsql-odbc",
+  "name": "gizmosql-odbc",
   "version-string": "1.0.0",
   "dependencies": [
     "abseil",
