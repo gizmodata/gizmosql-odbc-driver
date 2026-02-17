@@ -22,15 +22,28 @@ endif()
 find_package(ZLIB REQUIRED)
 
 # Add Protobuf dependencies needed by Arrow Flight. Should be pre-installed.
-set(Protobuf_USE_STATIC_LIBS ON)
+if (MSVC)
+  set(Protobuf_USE_STATIC_LIBS ON)
+endif()
 find_package(Protobuf REQUIRED)
 
 # Add OpenSSL dependencies needed by Arrow Flight. Should be pre-installed.
-# May need to set OPENSSL_ROOT_DIR first. On Mac if using brew:
-# brew install openssl@1.1
-# add to the cmake line -DOPENSSL_ROOT_DIR=/usr/local/Cellar/openssl@1.1/1.1.1m
-if (NOT DEFINED OPENSSL_ROOT_DIR AND DEFINED APPLE AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-  set(OPENSSL_ROOT_DIR /usr/local/Cellar/openssl@1.1/1.1.1m)
+# On macOS with Homebrew, set OPENSSL_ROOT_DIR if not already defined.
+if (NOT DEFINED OPENSSL_ROOT_DIR AND APPLE AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+  execute_process(
+    COMMAND brew --prefix openssl@3
+    OUTPUT_VARIABLE OPENSSL_ROOT_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE BREW_OPENSSL_RESULT
+  )
+  if (NOT BREW_OPENSSL_RESULT EQUAL 0)
+    # Fallback to openssl@1.1 if openssl@3 not available
+    execute_process(
+      COMMAND brew --prefix openssl@1.1
+      OUTPUT_VARIABLE OPENSSL_ROOT_DIR
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+  endif()
 endif()
 # This is based on Arrow's FindOpenSSL module. It's not clear if both variables
 # need to be set.
