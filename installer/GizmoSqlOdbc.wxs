@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="GizmoSQL ODBC Driver"
+           Manufacturer="GizmoData LLC"
+           Version="!(bind.fileVersion.GizmoSqlOdbcDll)"
+           UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
+           Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of GizmoSQL ODBC Driver is already installed." />
+
+    <Media Id="1" Cabinet="gizmosql.cab" EmbedCab="yes" />
+
+    <!-- Banner and dialog images -->
+    <WixVariable Id="WixUIBannerBmp" Value="banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="dialog.bmp" />
+    <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+
+    <Feature Id="ProductFeature" Title="GizmoSQL ODBC Driver" Level="1">
+      <ComponentGroupRef Id="DriverComponents" />
+      <ComponentGroupRef Id="RegistryComponents" />
+    </Feature>
+
+    <UIRef Id="WixUI_InstallDir" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="GizmoSQL ODBC Driver">
+        <Directory Id="LOGDIR" Name="logs" />
+      </Directory>
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="DriverComponents" Directory="INSTALLFOLDER">
+      <Component Id="DriverDll" Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901" Win64="yes">
+        <File Id="GizmoSqlOdbcDll"
+              Source="!(bindpath.BinDir)\gizmosql-odbc.dll"
+              KeyPath="yes" />
+      </Component>
+      <Component Id="ConfigFile" Guid="C3D4E5F6-A7B8-9012-CDEF-123456789012" Win64="yes">
+        <File Id="GizmoSqlOdbcIni"
+              Source="gizmosql-odbc.ini"
+              KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="RegistryComponents" Directory="INSTALLFOLDER">
+      <!-- Register the ODBC driver in the system registry -->
+      <Component Id="OdbcDriverRegistry" Guid="D4E5F6A7-B8C9-0123-DEFA-234567890123" Win64="yes">
+        <RegistryKey Root="HKLM" Key="SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers">
+          <RegistryValue Name="GizmoSQL ODBC Driver" Type="string" Value="Installed" />
+        </RegistryKey>
+        <RegistryKey Root="HKLM" Key="SOFTWARE\ODBC\ODBCINST.INI\GizmoSQL ODBC Driver">
+          <RegistryValue Name="Driver" Type="string" Value="[INSTALLFOLDER]gizmosql-odbc.dll" />
+          <RegistryValue Name="Setup" Type="string" Value="[INSTALLFOLDER]gizmosql-odbc.dll" />
+          <RegistryValue Name="UsageCount" Type="integer" Value="1" />
+        </RegistryKey>
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

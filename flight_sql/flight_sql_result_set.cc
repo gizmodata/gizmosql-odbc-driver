@@ -57,7 +57,9 @@ FlightSqlResultSet::FlightSqlResultSet(
   if (transformer_) {
     schema_ = transformer_->GetTransformedSchema();
   } else {
-    ThrowIfNotOK(flight_info->GetSchema(nullptr, &schema_));
+    auto schema_result = flight_info->GetSchema(nullptr);
+    ThrowIfNotOK(schema_result.status());
+    schema_ = std::move(schema_result).ValueUnsafe();
   }
 
   for (size_t i = 0; i < columns_.size(); ++i) {

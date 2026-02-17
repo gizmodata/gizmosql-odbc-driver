@@ -21,8 +21,8 @@ namespace flight_sql {
 using namespace odbcabstraction;
 using arrow::DataType;
 using arrow::Field;
-using arrow::util::make_optional;
-using arrow::util::nullopt;
+using std::make_optional;
+using std::nullopt;
 
 constexpr int32_t DefaultDecimalPrecision = 38;
 
@@ -258,9 +258,9 @@ FlightSqlResultSetMetadata::FlightSqlResultSetMetadata(
     const odbcabstraction::MetadataSettings& metadata_settings)
     :
     metadata_settings_(metadata_settings){
-  arrow::ipc::DictionaryMemo dict_memo;
-
-  ThrowIfNotOK(flight_info->GetSchema(&dict_memo, &schema_));
+  auto schema_result = flight_info->GetSchema(nullptr);
+  ThrowIfNotOK(schema_result.status());
+  schema_ = std::move(schema_result).ValueUnsafe();
 }
 
 } // namespace flight_sql

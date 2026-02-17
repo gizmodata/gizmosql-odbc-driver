@@ -77,7 +77,11 @@ GetTablesForSQLAllCatalogs(const ColumnNames &names,
 
   ThrowIfNotOK(result.status());
   flight_info = result.ValueOrDie();
-  ThrowIfNotOK(flight_info->GetSchema(nullptr, &schema));
+  {
+    auto schema_result = flight_info->GetSchema(nullptr);
+    ThrowIfNotOK(schema_result.status());
+    schema = std::move(schema_result).ValueUnsafe();
+  }
 
   auto transformer = RecordBatchTransformerWithTasksBuilder(schema)
                          .RenameField("catalog_name", names.catalog_column)
@@ -103,7 +107,11 @@ std::shared_ptr<ResultSet> GetTablesForSQLAllDbSchemas(
 
   ThrowIfNotOK(result.status());
   flight_info = result.ValueOrDie();
-  ThrowIfNotOK(flight_info->GetSchema(nullptr, &schema));
+  {
+    auto schema_result = flight_info->GetSchema(nullptr);
+    ThrowIfNotOK(schema_result.status());
+    schema = std::move(schema_result).ValueUnsafe();
+  }
 
   auto transformer = RecordBatchTransformerWithTasksBuilder(schema)
                          .AddFieldOfNulls(names.catalog_column, utf8())
@@ -131,7 +139,11 @@ GetTablesForSQLAllTableTypes(const ColumnNames &names,
 
   ThrowIfNotOK(result.status());
   flight_info = result.ValueOrDie();
-  ThrowIfNotOK(flight_info->GetSchema(nullptr, &schema));
+  {
+    auto schema_result = flight_info->GetSchema(nullptr);
+    ThrowIfNotOK(schema_result.status());
+    schema = std::move(schema_result).ValueUnsafe();
+  }
 
   auto transformer = RecordBatchTransformerWithTasksBuilder(schema)
                          .AddFieldOfNulls(names.catalog_column, utf8())
@@ -159,7 +171,11 @@ std::shared_ptr<ResultSet> GetTablesForGenericUse(
 
   ThrowIfNotOK(result.status());
   flight_info = result.ValueOrDie();
-  ThrowIfNotOK(flight_info->GetSchema(nullptr, &schema));
+  {
+    auto schema_result = flight_info->GetSchema(nullptr);
+    ThrowIfNotOK(schema_result.status());
+    schema = std::move(schema_result).ValueUnsafe();
+  }
 
   if (metadata_settings.hide_sql_tables_listing_) {
     auto transformer = RecordBatchTransformerWithTasksBuilder(schema)

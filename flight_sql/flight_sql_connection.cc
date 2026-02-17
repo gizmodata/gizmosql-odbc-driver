@@ -190,9 +190,9 @@ void FlightSqlConnection::Connect(const ConnPropertyMap &properties,
         &cookie_factory = arrow::flight::GetCookieFactory();
     client_options.middleware.push_back(cookie_factory);
 
-    std::unique_ptr<FlightClient> flight_client;
-    ThrowIfNotOK(
-      FlightClient::Connect(location, client_options, &flight_client));
+    auto flight_client_result = FlightClient::Connect(location, client_options);
+    ThrowIfNotOK(flight_client_result.status());
+    std::unique_ptr<FlightClient> flight_client = std::move(flight_client_result).ValueUnsafe();
 
     std::unique_ptr<FlightSqlAuthMethod> auth_method =
       FlightSqlAuthMethod::FromProperties(flight_client, properties);
@@ -415,7 +415,6 @@ FlightSqlConnection::BuildLocation(const ConnPropertyMap &properties,
   const std::string &host = host_iter->second;
   const int &port = boost::lexical_cast<int>(port_iter->second);
 
-  Location location;
   if (ssl_config->useEncryption()) {
     AddressInfo address_info;
     char host_name_info[NI_MAXHOST] = "";
@@ -429,8 +428,9 @@ FlightSqlConnection::BuildLocation(const ConnPropertyMap &properties,
         operation_result = address_info.GetAddressInfo(host, host_name_info,
                                                            NI_MAXHOST);
         if (operation_result) {
-          ThrowIfNotOK(Location::ForGrpcTls(host_name_info, port, &location));
-          return location;
+          auto loc_result = Location::ForGrpcTls(host_name_info, port);
+          ThrowIfNotOK(loc_result.status());
+          return std::move(loc_result).ValueUnsafe();
         }
         // TODO: We should log that we could not convert an IP to hostname here.
       }
@@ -440,12 +440,14 @@ FlightSqlConnection::BuildLocation(const ConnPropertyMap &properties,
       // if it is not an IP.
     }
 
-    ThrowIfNotOK(Location::ForGrpcTls(host, port, &location));
-    return location;
+    auto loc_result = Location::ForGrpcTls(host, port);
+    ThrowIfNotOK(loc_result.status());
+    return std::move(loc_result).ValueUnsafe();
   }
 
-  ThrowIfNotOK(Location::ForGrpcTcp(host, port, &location));
-  return location;
+  auto loc_result = Location::ForGrpcTcp(host, port);
+  ThrowIfNotOK(loc_result.status());
+  return std::move(loc_result).ValueUnsafe();
 }
 
 void FlightSqlConnection::Close() {

@@ -5,7 +5,7 @@
 #
 
 cmake_minimum_required(VERSION 3.11)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -62,6 +62,7 @@ endif()
 find_package(gRPC 1.36 CONFIG REQUIRED)
 
 find_package(RapidJSON CONFIG REQUIRED)
+include_directories(${RapidJSON_INCLUDE_DIRS})
 
 SET(Arrow_STATIC ON)
 
@@ -102,8 +103,7 @@ elseif(APPLE)
           -DVCPKG_MANIFEST_MODE=OFF
           -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-install
           -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-          -DProtobuf_PROTOC_EXECUTABLE=${Protobuf_PROTOC_EXECUTABLE}
-          -DProtobuf_INCLUDE_DIR=${Protobuf_INCLUDE_DIR}
+          -DARROW_DEPENDENCY_SOURCE=AUTO
           )
   if (DEFINED OPENSSL_ROOT_DIR)
     list(APPEND ARROW_CMAKE_ARGS -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR})
@@ -124,13 +124,13 @@ else()
     -DARROW_DEPENDENCY_USE_SHARED=OFF
     -DCMAKE_DEPENDS_USE_COMPILER=FALSE
     -DOPENSSL_INCLUDE_DIR=${OPENSSL_INCLUDE_DIR}
-    -DProtobuf_PROTOC_EXECUTABLE=${Protobuf_PROTOC_EXECUTABLE}
+    -DARROW_DEPENDENCY_SOURCE=AUTO
     -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-install
   )
 endif()
 
 set(ARROW_GIT_REPOSITORY "https://github.com/apache/arrow.git" CACHE STRING "Arrow repository path or URL")
-set(ARROW_GIT_TAG "b050bd0d31db6412256cec3362c0d57c9732e1f2" CACHE STRING "Tag for the Arrow repository")
+set(ARROW_GIT_TAG "apache-arrow-23.0.1" CACHE STRING "Tag for the Arrow repository")
 
 message("Using Arrow from ${ARROW_GIT_REPOSITORY} on tag ${ARROW_GIT_TAG}")
 ExternalProject_Add(ApacheArrow
@@ -248,6 +248,7 @@ else()
   set(ARROW_LIBS
     arrow_flight_sql
     arrow_flight
+    arrow_compute
     arrow
     arrow_bundled_dependencies
   )

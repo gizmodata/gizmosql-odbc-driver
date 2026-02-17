@@ -12,6 +12,7 @@
 #include "flight_sql_connection.h"
 #include <odbcabstraction/exceptions.h>
 #include <odbcabstraction/logger.h>
+#include <odbcabstraction/utils.h>
 
 #include <arrow/flight/client.h>
 #include <arrow/result.h>

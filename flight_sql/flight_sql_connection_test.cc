@@ -112,9 +112,9 @@ TEST(BuildLocationTests, ForTcp) {
     },
     missing_attr, ssl_config);
 
-  Location expected_location;
-  ASSERT_TRUE(
-    Location::ForGrpcTcp("localhost", 32010, &expected_location).ok());
+  auto expected_location_result = Location::ForGrpcTcp("localhost", 32010);
+  ASSERT_TRUE(expected_location_result.ok());
+  Location expected_location = std::move(expected_location_result).ValueUnsafe();
   ASSERT_EQ(expected_location, actual_location1);
   ASSERT_NE(expected_location, actual_location2);
 }
@@ -145,9 +145,9 @@ TEST(BuildLocationTests, ForTls) {
   const Location &actual_location2 = FlightSqlConnection::BuildLocation(
     second_properties, missing_attr, ssl_config);
 
-  Location expected_location;
-  ASSERT_TRUE(
-      Location::ForGrpcTls("localhost", 32010, &expected_location).ok());
+  auto expected_location_result = Location::ForGrpcTls("localhost", 32010);
+  ASSERT_TRUE(expected_location_result.ok());
+  Location expected_location = std::move(expected_location_result).ValueUnsafe();
   ASSERT_EQ(expected_location, actual_location1);
   ASSERT_NE(expected_location, actual_location2);
 }

@@ -90,16 +90,23 @@ useEncryption = true
 
 ### Windows (x64 / arm64)
 
-Download `gizmosql-odbc.dll` for your architecture from the [latest release](https://github.com/gizmodata/gizmosql-odbc-driver/releases).
+#### Installer (recommended)
 
-Register the driver using the ODBC Data Source Administrator or via command line:
+Download the MSI installer for your architecture from the [latest release](https://github.com/gizmodata/gizmosql-odbc-driver/releases):
+
+- `GizmoSQL-ODBC-Driver-x64.msi` for 64-bit Intel/AMD
+- `GizmoSQL-ODBC-Driver-arm64.msi` for ARM64
+
+The installer registers the ODBC driver automatically. After installation, use the ODBC Data Source Administrator (`odbcad32.exe`) to create a DSN.
+
+#### Manual install
+
+Download `gizmosql-odbc.dll` from the [latest release](https://github.com/gizmodata/gizmosql-odbc-driver/releases) and register manually:
 
 ```cmd
 reg add "HKLM\SOFTWARE\ODBC\ODBCINST.INI\GizmoSQL ODBC Driver" /v Driver /t REG_SZ /d "C:\path\to\gizmosql-odbc.dll"
 reg add "HKLM\SOFTWARE\ODBC\ODBCINST.INI\GizmoSQL ODBC Driver" /v Setup /t REG_SZ /d "C:\path\to\gizmosql-odbc.dll"
 ```
-
-Use the ODBC Data Source Administrator (`odbcad32.exe`) to create a DSN with the graphical configuration dialog.
 
 ## Configuration
 

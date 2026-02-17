@@ -266,11 +266,11 @@ public:
   }
 
   Status Visit(const SparseUnionScalar &scalar) override {
-    return scalar.value->Accept(this);
+    return scalar.child_value()->Accept(this);
   }
 
   Status Visit(const DenseUnionScalar &scalar) override {
-    return scalar.value->Accept(this);
+    return scalar.child_value()->Accept(this);
   }
 
   Status Visit(const ExtensionScalar &scalar) override {

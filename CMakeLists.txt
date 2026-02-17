@@ -5,7 +5,7 @@
 #
 
 cmake_minimum_required(VERSION 3.11)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 project(gizmosql_odbc)
 
@@ -45,3 +45,4 @@ FetchContent_MakeAvailable(googletest)
 
 add_subdirectory(flight_sql)
 add_subdirectory(odbcabstraction)
+add_subdirectory(odbc_entry)

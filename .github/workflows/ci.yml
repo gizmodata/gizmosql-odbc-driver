@@ -49,11 +49,11 @@ jobs:
       - name: Run tests
         run: ctest --test-dir build --output-on-failure
 
-      - name: Upload artifact
+      - name: Upload shared library
         uses: actions/upload-artifact@v4
         with:
           name: libgizmosql-odbc-linux-${{ matrix.arch }}.so
-          path: build/*/lib/libgizmosql*.so
+          path: build/*/lib/libgizmosql-odbc.so
           if-no-files-found: error
 
   build-macos:
@@ -76,11 +76,11 @@ jobs:
       - name: Run tests
         run: ctest --test-dir build --output-on-failure
 
-      - name: Upload artifact
+      - name: Upload shared library
         uses: actions/upload-artifact@v4
         with:
           name: libgizmosql-odbc-macos-arm64.dylib
-          path: build/*/lib/libgizmosql*.dylib
+          path: build/*/lib/libgizmosql-odbc.dylib
           if-no-files-found: error
 
   build-windows:
@@ -121,12 +121,95 @@ jobs:
       - name: Build
         run: cmake --build build --parallel 8 --config Release
 
-      - name: Upload artifact
+      - name: Upload shared library
         uses: actions/upload-artifact@v4
         with:
           name: gizmosql-odbc-windows-${{ matrix.arch }}.dll
-          path: build/Release/**/*.dll
+          path: build/Release/**/gizmosql-odbc.dll
           if-no-files-found: error
+
+  integration-test-linux:
+    needs: build-linux
+    name: Integration Tests (Linux x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      gizmosql:
+        image: gizmodata/gizmosql:latest
+        ports:
+          - 31337:31337
+        env:
+          GIZMOSQL_USERNAME: gizmosql_user
+          GIZMOSQL_PASSWORD: gizmosql_password
+          DATABASE_FILENAME: /tmp/test.duckdb
+          TLS_ENABLED: "0"
+          PRINT_QUERIES: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ODBC runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unixodbc
+
+      - name: Download driver artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: libgizmosql-odbc-linux-x64.so
+          path: driver
+
+      - name: Find and install driver
+        run: |
+          DRIVER_PATH=$(find driver -name '*.so' -print -quit)
+          cp "$DRIVER_PATH" /tmp/libgizmosql-odbc.so
+          chmod +x /tmp/libgizmosql-odbc.so
+          echo "DRIVER_PATH=/tmp/libgizmosql-odbc.so" >> $GITHUB_ENV
+
+      - name: Verify exported symbols
+        run: |
+          echo "=== Exported SQL symbols ==="
+          nm -D "$DRIVER_PATH" | grep ' T SQL' | head -20
+          echo "..."
+          nm -D "$DRIVER_PATH" | grep -c ' T SQL'
+          echo "SQL* symbols exported"
+
+      - name: Wait for GizmoSQL
+        run: |
+          for i in $(seq 1 30); do
+            nc -z localhost 31337 && echo "GizmoSQL is ready" && exit 0
+            echo "Waiting for GizmoSQL... ($i/30)"
+            sleep 2
+          done
+          echo "GizmoSQL did not start in time" && exit 1
+
+      - name: Register driver in odbcinst.ini
+        run: |
+          cat > /tmp/odbcinst.ini << 'EOF'
+          [GizmoSQL ODBC Driver]
+          Description = GizmoSQL ODBC Driver
+          Driver      = /tmp/libgizmosql-odbc.so
+          EOF
+
+          cat > /tmp/odbc.ini << 'EOF'
+          [GizmoSQL Test]
+          Driver        = GizmoSQL ODBC Driver
+          host          = localhost
+          port          = 31337
+          uid           = gizmosql_user
+          pwd           = gizmosql_password
+          useEncryption = false
+          EOF
+
+          echo "ODBCSYSINI=/tmp" >> $GITHUB_ENV
+          echo "ODBCINI=/tmp/odbc.ini" >> $GITHUB_ENV
+
+      - name: Run integration tests with isql
+        run: |
+          echo "=== Testing DSN connection with isql ==="
+          echo "SELECT 1 AS test_value;" | isql -v "GizmoSQL Test" 2>&1 || true
+
+          echo "=== Testing driver-level connection string ==="
+          echo "SELECT 42 AS answer;" | isql -v -k "Driver=/tmp/libgizmosql-odbc.so;host=localhost;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false" 2>&1 || true
 
   sign-windows:
     needs: build-windows
@@ -178,8 +261,95 @@ jobs:
           path: unsigned/**/*.dll
           if-no-files-found: error
 
+  build-msi:
+    needs: sign-windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    runs-on: windows-latest
+    name: Build MSI (${{ matrix.arch }})
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download signed DLL
+        uses: actions/download-artifact@v4
+        with:
+          name: gizmosql-odbc-windows-${{ matrix.arch }}-signed.dll
+          path: installer/bin
+
+      - name: Install WiX Toolset
+        run: dotnet tool install --global wix
+
+      - name: Convert logo to BMP for installer dialogs
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          # Create banner (493x58)
+          $banner = New-Object System.Drawing.Bitmap(493, 58)
+          $g = [System.Drawing.Graphics]::FromImage($banner)
+          $g.Clear([System.Drawing.Color]::White)
+          $logo = [System.Drawing.Image]::FromFile("${{ github.workspace }}\installer\gizmosql_logo.png")
+          $g.DrawImage($logo, 10, 4, 200, 50)
+          $g.Dispose()
+          $banner.Save("${{ github.workspace }}\installer\banner.bmp", [System.Drawing.Imaging.ImageFormat]::Bmp)
+          # Create dialog (493x312)
+          $dialog = New-Object System.Drawing.Bitmap(493, 312)
+          $g = [System.Drawing.Graphics]::FromImage($dialog)
+          $g.Clear([System.Drawing.Color]::White)
+          $g.DrawImage($logo, 20, 20, 300, 75)
+          $g.Dispose()
+          $dialog.Save("${{ github.workspace }}\installer\dialog.bmp", [System.Drawing.Imaging.ImageFormat]::Bmp)
+          $logo.Dispose()
+
+      - name: Create license.rtf
+        run: |
+          $license = Get-Content "${{ github.workspace }}\LICENSE" -Raw
+          $rtf = "{\rtf1\ansi\deff0 {\fonttbl {\f0 Consolas;}}\f0\fs18 " + ($license -replace "`n", "\par ") + "}"
+          Set-Content -Path "${{ github.workspace }}\installer\license.rtf" -Value $rtf
+
+      - name: Build MSI
+        run: |
+          wix build `
+            "${{ github.workspace }}\installer\GizmoSqlOdbc.wxs" `
+            -bindpath:BinDir="${{ github.workspace }}\installer\bin" `
+            -o "${{ github.workspace }}\installer\GizmoSQL-ODBC-Driver-${{ matrix.arch }}.msi" `
+            -ext WixToolset.UI.wixext
+
+      - name: Azure login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install AzureSignTool
+        run: dotnet tool install --global AzureSignTool
+
+      - name: Sign MSI
+        run: |
+          AzureSignTool sign `
+            --azure-key-vault-url "${{ secrets.AZURE_KEY_VAULT_URI }}" `
+            --azure-key-vault-certificate "${{ secrets.AZURE_CERT_NAME }}" `
+            --azure-key-vault-managed-identity `
+            --timestamp-rfc3161 http://timestamp.digicert.com `
+            --timestamp-digest sha256 `
+            --file-digest sha256 `
+            --verbose `
+            "${{ github.workspace }}\installer\GizmoSQL-ODBC-Driver-${{ matrix.arch }}.msi"
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: GizmoSQL-ODBC-Driver-${{ matrix.arch }}.msi
+          path: installer/GizmoSQL-ODBC-Driver-${{ matrix.arch }}.msi
+          if-no-files-found: error
+
   release:
-    needs: [build-linux, build-macos, build-windows, sign-windows]
+    needs: [build-linux, build-macos, build-windows, sign-windows, build-msi, integration-test-linux]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     name: Release
@@ -208,6 +378,9 @@ jobs:
             find artifacts -name "*windows*x64*/*.dll" -exec cp {} release/gizmosql-odbc-windows-x64.dll \;
           find artifacts -name "*windows*arm64*signed*/*.dll" -exec cp {} release/gizmosql-odbc-windows-arm64.dll \; 2>/dev/null || \
             find artifacts -name "*windows*arm64*/*.dll" -exec cp {} release/gizmosql-odbc-windows-arm64.dll \;
+          # MSI installers
+          find artifacts -name "GizmoSQL-ODBC-Driver-x64.msi" -exec cp {} release/ \; 2>/dev/null
+          find artifacts -name "GizmoSQL-ODBC-Driver-arm64.msi" -exec cp {} release/ \; 2>/dev/null
 
       - name: Generate build provenance attestations
         uses: actions/attest-build-provenance@v2

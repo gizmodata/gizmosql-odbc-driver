@@ -16,6 +16,7 @@
 #include <arrow/type.h>
 #include <arrow/type_fwd.h>
 #include <arrow/compute/api.h>
+#include <arrow/compute/initialize.h>
 
 #include "json_converter.h"
 
@@ -54,8 +55,8 @@ odbcabstraction::CDataType GetDefaultCCharType(bool useWideChar) {
 }
 
 using namespace odbcabstraction;
-using arrow::util::make_optional;
-using arrow::util::nullopt;
+using std::make_optional;
+using std::nullopt;
 
 /// \brief Returns the mapping from Arrow type to SqlDataType
 /// \param field the field to return the SqlDataType for
@@ -275,7 +276,7 @@ GetRadixFromSqlDataType(odbcabstraction::SqlDataType data_type) {
   case SqlDataType_DOUBLE:
     return 2;
   default:
-    return arrow::util::nullopt;
+    return std::nullopt;
   }
 }
 
@@ -339,7 +340,7 @@ optional<int16_t> GetSqlDateTimeSubCode(SqlDataType data_type) {
   case SqlDataType_INTERVAL_MINUTE_TO_SECOND:
     return SqlDateTimeSubCode_MINUTE_TO_SECOND;
   default:
-    return arrow::util::nullopt;
+    return std::nullopt;
   }
 }
 
@@ -355,7 +356,7 @@ optional<int32_t> GetCharOctetLength(SqlDataType data_type,
       if (column_size.ok()) {
         return column_size.ValueOrDie();
       } else {
-        return arrow::util::nullopt;
+        return std::nullopt;
       }
     case SqlDataType_WCHAR:
     case SqlDataType_WVARCHAR:
@@ -363,7 +364,7 @@ optional<int32_t> GetCharOctetLength(SqlDataType data_type,
       if (column_size.ok()) {
         return column_size.ValueOrDie() * GetSqlWCharSize();
       } else {
-        return arrow::util::nullopt;
+        return std::nullopt;
       }
     case SqlDataType_TINYINT:
     case SqlDataType_BIT:
@@ -401,7 +402,7 @@ optional<int32_t> GetCharOctetLength(SqlDataType data_type,
     case SqlDataType_GUID:
       return 16;
     default:
-      return arrow::util::nullopt;
+      return std::nullopt;
   }
 }
 optional<int32_t> GetTypeScale(SqlDataType data_type,
@@ -420,7 +421,7 @@ optional<int32_t> GetTypeScale(SqlDataType data_type,
     case SqlDataType_BIGINT:
       return 0;
     default:
-      return arrow::util::nullopt;
+      return std::nullopt;
   }
 }
 optional<int32_t> GetColumnSize(SqlDataType data_type,
@@ -433,8 +434,8 @@ optional<int32_t> GetColumnSize(SqlDataType data_type,
     case SqlDataType_WCHAR:
     case SqlDataType_WVARCHAR:
     case SqlDataType_WLONGVARCHAR:
-      return column_size.has_value() ? arrow::util::make_optional(column_size.value() * GetSqlWCharSize())
-                                     : arrow::util::nullopt;
+      return column_size.has_value() ? std::make_optional(column_size.value() * GetSqlWCharSize())
+                                     : std::nullopt;
     case SqlDataType_BINARY:
     case SqlDataType_VARBINARY:
     case SqlDataType_LONGVARBINARY:
@@ -480,7 +481,7 @@ optional<int32_t> GetColumnSize(SqlDataType data_type,
     case SqlDataType_GUID:
       return 16;
     default:
-      return arrow::util::nullopt;
+      return std::nullopt;
   }
 }
 
@@ -494,8 +495,8 @@ optional<int32_t> GetBufferLength(SqlDataType data_type,
   case SqlDataType_WCHAR:
   case SqlDataType_WVARCHAR:
   case SqlDataType_WLONGVARCHAR:
-    return column_size.has_value() ? arrow::util::make_optional(column_size.value() * GetSqlWCharSize())
-                                   : arrow::util::nullopt;
+    return column_size.has_value() ? std::make_optional(column_size.value() * GetSqlWCharSize())
+                                   : std::nullopt;
   case SqlDataType_BINARY:
   case SqlDataType_VARBINARY:
   case SqlDataType_LONGVARBINARY:
@@ -540,7 +541,7 @@ optional<int32_t> GetBufferLength(SqlDataType data_type,
   case SqlDataType_GUID:
     return 16;
   default:
-    return arrow::util::nullopt;
+    return std::nullopt;
   }
 }
 
@@ -596,7 +597,7 @@ optional<int32_t> GetLength(SqlDataType data_type, const optional<int32_t>& colu
     case SqlDataType_GUID:
       return 16;
     default:
-      return arrow::util::nullopt;
+      return std::nullopt;
   }
 }
 
@@ -887,6 +888,10 @@ CheckConversion(const arrow::Result<arrow::Datum> &result) {
 
 ArrayConvertTask GetConverter(arrow::Type::type original_type_id,
                               odbcabstraction::CDataType target_type) {
+  // Arrow 23 requires explicit initialization of compute kernels (strptime, add, cast, etc.)
+  static auto compute_init = arrow::compute::Initialize();
+  ThrowIfNotOK(compute_init);
+
   // The else statement has a convert the works for the most case of array
   // conversion. In case, we find conversion that the default one can't handle
   // we can include some additional if-else statement with the logic to handle
@@ -894,7 +899,7 @@ ArrayConvertTask GetConverter(arrow::Type::type original_type_id,
   if (original_type_id == arrow::Type::STRING &&
       target_type == odbcabstraction::CDataType_TIME) {
     return [=](const std::shared_ptr<arrow::Array> &original_array) {
-      arrow::compute::StrptimeOptions options("%H:%M", arrow::TimeUnit::MICRO, false);
+      arrow::compute::StrptimeOptions options("%H:%M", arrow::TimeUnit::MICRO);
 
       auto converted_result =
         arrow::compute::Strptime({original_array}, options);
@@ -956,7 +961,7 @@ ArrayConvertTask GetConverter(arrow::Type::type original_type_id,
     return [=](const std::shared_ptr<arrow::Array> &original_array) {
       // The Strptime requires a date format. Using the ISO 8601 format
       arrow::compute::StrptimeOptions options("%Y-%m-%d",
-                                              arrow::TimeUnit::SECOND, false);
+                                              arrow::TimeUnit::SECOND);
 
       auto converted_result =
         arrow::compute::Strptime({original_array}, options);

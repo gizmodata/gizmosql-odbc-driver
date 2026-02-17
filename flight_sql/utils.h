@@ -8,9 +8,9 @@
 #pragma once
 
 #include <arrow/flight/types.h>
-#include <arrow/util/optional.h>
 #include <boost/xpressive/xpressive.hpp>
 #include <codecvt>
+#include <optional>
 #include <odbcabstraction/exceptions.h>
 #include <odbcabstraction/types.h>
 
@@ -21,7 +21,7 @@ typedef std::function<
   std::shared_ptr<arrow::Array>(const std::shared_ptr<arrow::Array> &)>
   ArrayConvertTask;
 
-using arrow::util::optional;
+using std::optional;
 
 inline void ThrowIfNotOK(const arrow::Status &status) {
   if (!status.ok()) {
