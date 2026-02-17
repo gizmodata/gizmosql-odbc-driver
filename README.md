@@ -106,6 +106,7 @@ Use the ODBC Data Source Administrator (`odbcad32.exe`) to create a DSN with the
 | `user` / `uid` | string | | Username for basic authentication |
 | `password` / `pwd` | string | | Password for basic authentication |
 | `token` | string | | Bearer token for token-based authentication |
+| `authType` | string | | Authentication method: `basic`, `token`, or `external` (OAuth) |
 | `useEncryption` | bool | `true` | Enable TLS/SSL encryption |
 | `disableCertificateVerification` | bool | `false` | Skip server certificate verification (not recommended for production) |
 | `trustedCerts` | string | | Path to a PEM file with trusted CA certificates |
@@ -126,9 +127,9 @@ The driver supports three authentication methods:
 
 1. **Basic authentication** — Set `user`/`uid` and `password`/`pwd`
 2. **Token authentication** — Set `token` with a bearer token
-3. **No authentication** — Omit all credential properties
+3. **OAuth (external)** — Set `authType=external` to initiate the server-side OAuth discovery flow. The driver opens a browser for login and receives a token from the server. See [docs/OAUTH.md](docs/OAUTH.md) for details.
 
-If both user/password and token are provided, user/password takes precedence.
+If both user/password and token are provided, user/password takes precedence. At least one authentication method must be configured.
 
 ## Usage Examples
 

@@ -44,14 +44,6 @@ using driver::odbcabstraction::CommunicationException;
 using driver::odbcabstraction::Connection;
 
 namespace {
-class NoOpAuthMethod : public FlightSqlAuthMethod {
-public:
-  void Authenticate(FlightSqlConnection &connection,
-                    FlightCallOptions &call_options) override {
-    // Do nothing
-  }
-};
-
 class NoOpClientAuthHandler : public arrow::flight::ClientAuthHandler {
 public:
   NoOpClientAuthHandler() {}
@@ -205,7 +197,9 @@ std::unique_ptr<FlightSqlAuthMethod> FlightSqlAuthMethod::FromProperties(
     return std::unique_ptr<FlightSqlAuthMethod>(new TokenAuthMethod(*client, token));
   }
 
-  return std::unique_ptr<FlightSqlAuthMethod>(new NoOpAuthMethod);
+  throw AuthenticationException(
+      "Authentication credentials are required. "
+      "Provide user/password, a token, or set authType=external for OAuth.");
 }
 
 // --- OAuthAuthMethod implementation ---

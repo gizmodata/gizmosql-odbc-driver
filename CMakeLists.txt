@@ -15,7 +15,13 @@ include_directories(${Boost_INCLUDE_DIRS})
 
 # Add ODBC dependencies.
 if (APPLE)
-    set(ODBC_INCLUDE_DIRS /usr/local/Cellar/libiodbc/3.52.16/include)
+    # Find iODBC include path from Homebrew (works for both Intel and Apple Silicon)
+    execute_process(
+        COMMAND brew --prefix libiodbc
+        OUTPUT_VARIABLE IODBC_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    set(ODBC_INCLUDE_DIRS ${IODBC_PREFIX}/include)
     add_compile_definitions(HAVE_LONG_LONG SQLCOLATTRIBUTE_SQLLEN WITH_IODBC)
 else()
     find_package(ODBC REQUIRED)
@@ -31,7 +37,7 @@ endif()
 include(FetchContent)
 FetchContent_Declare(
     googletest
-    URL https://github.com/google/googletest/archive/609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip
+    URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
