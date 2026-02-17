@@ -8,8 +8,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include_directories(include)
 
-# Ensure fmt is loaded as header only
-add_compile_definitions(FMT_HEADER_ONLY)
+# Ensure fmt is loaded as header only (must propagate to all consumers)
 
 add_library(odbcabstraction
   include/odbcabstraction/calendar_utils.h
@@ -48,6 +47,8 @@ add_library(odbcabstraction
   odbc_impl/ODBCEnvironment.cc
   odbc_impl/ODBCStatement.cc
 )
+
+target_compile_definitions(odbcabstraction PUBLIC FMT_HEADER_ONLY)
 
 set_target_properties(odbcabstraction
     PROPERTIES
