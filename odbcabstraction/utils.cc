@@ -76,10 +76,9 @@ void ReadConfigFile(PropertyMap &properties, const std::string &config_file_name
   config_file.open(config_file_path);
 
   if (config_file.fail()) {
-    auto error_msg = "GizmoSQL ODBC driver config file not found on \"" + config_file_path +  "\"";
-    std::cerr << error_msg << std::endl;
-
-    throw DriverException(error_msg);
+    // Config file is optional — if missing, just return with empty properties.
+    // Logging will remain disabled by default.
+    return;
   }
 
   std::string temp_config;
