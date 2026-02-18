@@ -28,6 +28,10 @@ FlightStreamChunkBuffer::FlightStreamChunkBuffer(FlightSqlClient &flight_sql_cli
     ThrowIfNotOK(result.status());
     std::shared_ptr<FlightStreamReader> stream_reader_ptr(std::move(result.ValueOrDie()));
 
+    // Keep a reference so Close() can cancel the gRPC streams before
+    // joining producer threads (prevents hang on unconsumed DDL/DML results).
+    stream_readers_.push_back(stream_reader_ptr);
+
     BlockingQueue<Result<FlightStreamChunk>>::Supplier supplier = [=] {
       auto result = stream_reader_ptr->Next();
       bool isNotOk = !result.ok();
@@ -54,6 +58,11 @@ bool FlightStreamChunkBuffer::GetNext(FlightStreamChunk *chunk) {
 }
 
 void FlightStreamChunkBuffer::Close() {
+  // Cancel all gRPC streams first so producer threads blocked in Next()
+  // will unblock, allowing the queue's thread join to complete promptly.
+  for (auto &reader : stream_readers_) {
+    reader->Cancel();
+  }
   queue_.Close();
 }
 

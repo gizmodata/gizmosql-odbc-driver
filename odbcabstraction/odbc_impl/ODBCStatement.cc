@@ -679,7 +679,11 @@ bool ODBCStatement::GetData(SQLSMALLINT recordNumber, SQLSMALLINT cType, SQLPOIN
 
 void ODBCStatement::releaseStatement() {
   closeCursor(true);
-  m_connection.dropStatement(this);
+  // Note: dropStatement is intentionally NOT called here.
+  // It must be called by the entry point AFTER ExecuteWithDiagnostics
+  // returns, to avoid use-after-free (dropStatement erases the last
+  // shared_ptr, destroying this object while execute() still needs
+  // to access its diagnostics and mutex).
 }
 
 void ODBCStatement::GetTables(const std::string* catalog, const std::string* schema, const std::string* table, const std::string* tableType) {

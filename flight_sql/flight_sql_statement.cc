@@ -120,16 +120,7 @@ bool FlightSqlStatement::ExecutePrepared() {
 
   auto flight_info = result.ValueOrDie();
 
-  if (flight_info->endpoints().empty()) {
-    // DDL/DML — force execution via ExecuteUpdate.
-    auto update_result = prepared_statement_->ExecuteUpdate(call_options_);
-    ThrowIfNotOK(update_result.status());
-    update_count_ = update_result.ValueOrDie();
-    current_result_set_.reset();
-    return false;
-  }
-
-  update_count_ = -1;
+  update_count_ = flight_info->total_records();
   current_result_set_ = std::make_shared<FlightSqlResultSet>(
       sql_client_, call_options_, flight_info, nullptr, diagnostics_, metadata_settings_);
 
@@ -145,19 +136,7 @@ bool FlightSqlStatement::Execute(const std::string &query) {
 
   auto flight_info = result.ValueOrDie();
 
-  if (flight_info->endpoints().empty()) {
-    // No endpoints — DDL/DML statement.  The server may have deferred
-    // execution until DoGet(), which will never be called for an empty
-    // endpoint list.  Use ExecuteUpdate (DoPut RPC) to force the server
-    // to execute the statement immediately and return an update count.
-    auto update_result = sql_client_.ExecuteUpdate(call_options_, query);
-    ThrowIfNotOK(update_result.status());
-    update_count_ = update_result.ValueOrDie();
-    current_result_set_.reset();
-    return false; // No result set — update count only.
-  }
-
-  update_count_ = -1;
+  update_count_ = flight_info->total_records();
   current_result_set_ = std::make_shared<FlightSqlResultSet>(
       sql_client_, call_options_, flight_info, nullptr, diagnostics_, metadata_settings_);
 

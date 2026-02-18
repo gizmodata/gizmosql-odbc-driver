@@ -433,9 +433,9 @@ void ODBCDescriptor::ReleaseDescriptor() {
     stmt->RevertAppDescriptor(false);
   }
 
-  if (m_owningConnection) {
-    m_owningConnection->dropDescriptor(this);
-  }
+  // Note: dropDescriptor is intentionally NOT called here.
+  // It must be called by the entry point AFTER ExecuteWithDiagnostics
+  // returns, to avoid use-after-free.
 }
 
 void ODBCDescriptor::PopulateFromResultSetMetadata(ResultSetMetadata* rsmd) {

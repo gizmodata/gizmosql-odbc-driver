@@ -95,6 +95,8 @@ namespace ODBC
       void DetachFromStatement(ODBCStatement* statement, bool isApd);
       void ReleaseDescriptor();
 
+      ODBCConnection* GetOwningConnection() { return m_owningConnection; }
+
       void PopulateFromResultSetMetadata(driver::odbcabstraction::ResultSetMetadata* rsmd);
 
       const std::vector<DescriptorRecord>& GetRecords() const;

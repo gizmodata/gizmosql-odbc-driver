@@ -24,6 +24,7 @@ using driver::odbcabstraction::BlockingQueue;
 
 class FlightStreamChunkBuffer {
   BlockingQueue<Result<FlightStreamChunk>> queue_;
+  std::vector<std::shared_ptr<FlightStreamReader>> stream_readers_;
 
 public:
   FlightStreamChunkBuffer(FlightSqlClient &flight_sql_client,

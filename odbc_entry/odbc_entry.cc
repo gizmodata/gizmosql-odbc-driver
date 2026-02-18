@@ -231,24 +231,43 @@ static SQLRETURN FreeHandleImpl(SQLSMALLINT handleType, SQLHANDLE handle) {
     delete env;
     return SQL_SUCCESS;
   }
-  case SQL_HANDLE_DBC:
-    return ODBCConnection::ExecuteWithDiagnostics(
+  case SQL_HANDLE_DBC: {
+    auto *conn = ODBCConnection::of(handle);
+    SQLRETURN ret = ODBCConnection::ExecuteWithDiagnostics(
         handle, SQL_SUCCESS, [&]() {
-          ODBCConnection::of(handle)->releaseConnection();
+          conn->releaseConnection();
           return SQL_SUCCESS;
         });
-  case SQL_HANDLE_STMT:
-    return ODBCStatement::ExecuteWithDiagnostics(
+    conn->GetEnvironment().DropConnection(conn);
+    return ret;
+  }
+  case SQL_HANDLE_STMT: {
+    auto *stmt = ODBCStatement::of(handle);
+    SQLRETURN ret = ODBCStatement::ExecuteWithDiagnostics(
         handle, SQL_SUCCESS, [&]() {
-          ODBCStatement::of(handle)->releaseStatement();
+          stmt->releaseStatement();
           return SQL_SUCCESS;
         });
-  case SQL_HANDLE_DESC:
-    return ODBCDescriptor::ExecuteWithDiagnostics(
+    // Drop the statement AFTER ExecuteWithDiagnostics returns.
+    // releaseStatement() only closes the cursor; dropStatement() erases
+    // the last shared_ptr which destroys the object.  Calling it inside
+    // executeWithLock would be use-after-free (diagnostics + mutex).
+    stmt->GetConnection().dropStatement(stmt);
+    return ret;
+  }
+  case SQL_HANDLE_DESC: {
+    auto *desc = ODBCDescriptor::of(handle);
+    SQLRETURN ret = ODBCDescriptor::ExecuteWithDiagnostics(
         handle, SQL_SUCCESS, [&]() {
-          ODBCDescriptor::of(handle)->ReleaseDescriptor();
+          desc->ReleaseDescriptor();
           return SQL_SUCCESS;
         });
+    auto *owningConn = desc->GetOwningConnection();
+    if (owningConn) {
+      owningConn->dropDescriptor(desc);
+    }
+    return ret;
+  }
   default:
     return SQL_ERROR;
   }
