@@ -16,16 +16,16 @@
     "boost-xpressive",
     "brotli",
     "gflags",
+    "grpc",
     "openssl",
     "protobuf",
-    "zlib",
+    "rapidjson",
     "re2",
     "spdlog",
-    "grpc",
     "utf8proc",
+    "xsimd",
     "zlib",
-    "zstd",
-    "rapidjson"
+    "zstd"
   ],
   "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1"
 }
