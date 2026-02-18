@@ -90,6 +90,8 @@ if (MSVC)
     -DARROW_WITH_UTF8PROC=OFF
     -DARROW_BUILD_TESTS=OFF
     -DARROW_DEPENDENCY_SOURCE=VCPKG
+    -DARROW_DEPENDENCY_USE_SHARED=OFF
+    -DARROW_MIMALLOC=OFF
     -DVCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET}
     -DVCPKG_MANIFEST_MODE=${VCPKG_MANIFEST_MODE}
     -DCMAKE_DEPENDS_USE_COMPILER=FALSE
@@ -155,8 +157,8 @@ set(ARROW_LIB_DIR lib)
 link_directories(${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-install/${ARROW_LIB_DIR})
 
 if (MSVC)
-  # the following definitions stop arrow from using __declspec when staticly linking and will break on windows without them
-  add_compile_definitions(ARROW_STATIC ARROW_FLIGHT_STATIC)
+  # the following definitions stop arrow from using __declspec when statically linking and will break on windows without them
+  add_compile_definitions(ARROW_STATIC ARROW_COMPUTE_STATIC ARROW_FLIGHT_STATIC ARROW_FLIGHT_SQL_STATIC)
 endif()
 
 enable_testing()
@@ -249,6 +251,7 @@ if (MSVC)
   set(ARROW_LIBS
     arrow_flight_sql_static
     arrow_flight_static
+    arrow_compute_static
     arrow_static
   )
 else()

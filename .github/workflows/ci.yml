@@ -89,10 +89,10 @@ jobs:
       matrix:
         include:
           - arch: x64
-            triplet: x64-windows-static
+            triplet: x64-windows-static-md
             cmake_arch: x64
           - arch: arm64
-            triplet: arm64-windows-static
+            triplet: arm64-windows-static-md
             cmake_arch: ARM64
     runs-on: windows-2022
     name: Build Windows (${{ matrix.arch }})
