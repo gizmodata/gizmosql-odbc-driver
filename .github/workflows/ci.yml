@@ -94,10 +94,27 @@ jobs:
           - arch: arm64
             triplet: arm64-windows
             cmake_arch: ARM64
-    runs-on: windows-latest
+    runs-on: windows-2022
     name: Build Windows (${{ matrix.arch }})
     steps:
       - uses: actions/checkout@v4
+
+      - name: Free disk space
+        shell: pwsh
+        run: |
+          # Remove large preinstalled tools not needed for C++ builds
+          @(
+            "C:\Program Files\Android",
+            "C:\Program Files\Eclipse Adoptium",
+            "C:\ghcup",
+            "$env:AGENT_TOOLSDIRECTORY"
+          ) | ForEach-Object {
+            if (Test-Path $_) {
+              Write-Host "Removing $_"
+              Remove-Item -Recurse -Force $_ -ErrorAction SilentlyContinue
+            }
+          }
+          Get-PSDrive C | Select-Object Name, @{N='Free(GB)';E={[math]::Round($_.Free/1GB,1)}}
 
       - name: Set up vcpkg
         run: |
@@ -105,7 +122,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install --triplet ${{ matrix.triplet }} --x-install-root="$env:VCPKG_INSTALLATION_ROOT\installed"
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install --triplet ${{ matrix.triplet }} --clean-after-build --x-install-root="$env:VCPKG_INSTALLATION_ROOT\installed"
 
       - name: Configure
         run: |
@@ -202,132 +219,35 @@ jobs:
           useEncryption = false
           EOF
 
-      - name: Debug driver and ODBC configuration
-        run: |
-          echo "=== Driver shared library dependencies ==="
-          ldd /tmp/libgizmosql-odbc.so || true
-
-          echo ""
-          echo "=== ODBC configuration ==="
-          odbcinst -j 2>/dev/null || echo "(odbcinst not available)"
-
-          echo ""
-          echo "=== Contents of /etc/odbcinst.ini ==="
-          cat -A /etc/odbcinst.ini || true
-
-          echo ""
-          echo "=== Contents of ~/.odbc.ini ==="
-          cat -A ~/.odbc.ini || true
-
-          echo ""
-          echo "=== Test dlopen/dlsym directly (bypass DM) ==="
-          python3 << 'PYEOF'
-          import ctypes, sys
-
-          try:
-              lib = ctypes.CDLL('/tmp/libgizmosql-odbc.so')
-              print('Driver loaded successfully')
-
-              SQL_HANDLE_ENV = 1
-              SQL_HANDLE_DBC = 2
-              SQL_NULL_HANDLE = ctypes.c_void_p(0)
-              SQL_ATTR_ODBC_VERSION = 200
-              SQL_OV_ODBC3 = ctypes.c_void_p(3)
-
-              # Test ENV allocation
-              henv = ctypes.c_void_p()
-              rc = lib.SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, ctypes.byref(henv))
-              print(f'SQLAllocHandle(ENV) returned: {rc}, henv={henv.value}')
-
-              if rc != 0:
-                  print('ENV allocation failed!')
-                  sys.exit(1)
-
-              # Set ODBC version
-              rc = lib.SQLSetEnvAttr(henv, SQL_ATTR_ODBC_VERSION, SQL_OV_ODBC3, 0)
-              print(f'SQLSetEnvAttr(ODBC_VERSION=3) returned: {rc}')
-
-              # Test DBC allocation
-              hdbc = ctypes.c_void_p()
-              rc = lib.SQLAllocHandle(SQL_HANDLE_DBC, henv, ctypes.byref(hdbc))
-              print(f'SQLAllocHandle(DBC) returned: {rc}, hdbc={hdbc.value}')
-
-              if rc != 0:
-                  # Get diagnostics from ENV handle
-                  buf = ctypes.create_string_buffer(1024)
-                  state = ctypes.create_string_buffer(6)
-                  native_err = ctypes.c_int()
-                  msg_len = ctypes.c_short()
-                  drc = lib.SQLGetDiagRec(1, henv, 1, state, ctypes.byref(native_err), buf, 1024, ctypes.byref(msg_len))
-                  print(f'ENV diag rc={drc}, state={state.value}, msg={buf.value[:msg_len.value]}')
-                  print('DBC allocation failed!')
-                  sys.exit(1)
-
-              # Test SQLDriverConnect
-              conn_str = b'host=localhost;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false'
-              out_str = ctypes.create_string_buffer(1024)
-              out_len = ctypes.c_short()
-              rc = lib.SQLDriverConnect(hdbc, None, conn_str, len(conn_str), out_str, 1024, ctypes.byref(out_len), 0)
-              print(f'SQLDriverConnect returned: {rc}')
-
-              if rc != 0:
-                  buf = ctypes.create_string_buffer(1024)
-                  state = ctypes.create_string_buffer(6)
-                  native_err = ctypes.c_int()
-                  msg_len = ctypes.c_short()
-                  drc = lib.SQLGetDiagRec(2, hdbc, 1, state, ctypes.byref(native_err), buf, 1024, ctypes.byref(msg_len))
-                  print(f'DBC diag rc={drc}, state={state.value}, msg={buf.value[:msg_len.value]}')
-              else:
-                  print('Connection successful!')
-
-              # Clean up
-              lib.SQLDisconnect(hdbc)
-              lib.SQLFreeHandle(SQL_HANDLE_DBC, hdbc)
-              lib.SQLFreeHandle(SQL_HANDLE_ENV, henv)
-              print('All direct driver tests passed!')
-
-          except Exception as e:
-              print(f'Error: {e}')
-              import traceback
-              traceback.print_exc()
-              sys.exit(1)
-          PYEOF
-
       - name: Run integration tests with isql
         run: |
           CONN="Driver=/tmp/libgizmosql-odbc.so;host=localhost;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false"
 
           echo "=== Test 1: Basic SELECT via connection string ==="
-          echo "SELECT 42 AS answer;" | isql -v -k "$CONN" 2>&1
+          echo "SELECT 42 AS answer;" | isql -v -k "$CONN"
 
           echo "=== Test 2: Basic SELECT via DSN ==="
-          echo "SELECT 1 AS test_value;" | isql -v "GizmoSQL Test" 2>&1
+          echo "SELECT 1 AS test_value;" | isql -v "GizmoSQL Test"
 
-          echo "=== Test 3: DDL - CREATE TABLE (lazy fetch) ==="
-          echo "CREATE TABLE test_table (id INTEGER, name VARCHAR, value DOUBLE);" | isql -v -k "$CONN" 2>&1
+          echo "=== Test 3: DDL/DML round-trip (single session) ==="
+          isql -v -k "$CONN" << 'SQL'
+          CREATE TABLE test_table (id INTEGER, name VARCHAR, value DOUBLE)
+          INSERT INTO test_table VALUES (1, 'alice', 3.14)
+          INSERT INTO test_table VALUES (2, 'bob', 2.72)
+          INSERT INTO test_table VALUES (3, 'charlie', 1.41)
+          SELECT id, name, value FROM test_table ORDER BY id
+          UPDATE test_table SET value = 9.99 WHERE id = 2
+          SELECT id, name, value FROM test_table WHERE id = 2
+          DELETE FROM test_table WHERE id = 3
+          SELECT COUNT(*) AS row_count FROM test_table
+          DROP TABLE test_table
+          SQL
 
-          echo "=== Test 4: DML - INSERT rows (lazy fetch) ==="
-          echo "INSERT INTO test_table VALUES (1, 'alice', 3.14);" | isql -v -k "$CONN" 2>&1
-          echo "INSERT INTO test_table VALUES (2, 'bob', 2.72);" | isql -v -k "$CONN" 2>&1
-          echo "INSERT INTO test_table VALUES (3, 'charlie', 1.41);" | isql -v -k "$CONN" 2>&1
-
-          echo "=== Test 5: SELECT inserted data ==="
-          echo "SELECT id, name, value FROM test_table ORDER BY id;" | isql -v -k "$CONN" 2>&1
-
-          echo "=== Test 6: DML - UPDATE (lazy fetch) ==="
-          echo "UPDATE test_table SET value = 9.99 WHERE id = 2;" | isql -v -k "$CONN" 2>&1
-
-          echo "=== Test 7: SELECT after UPDATE ==="
-          echo "SELECT id, name, value FROM test_table WHERE id = 2;" | isql -v -k "$CONN" 2>&1
-
-          echo "=== Test 8: DML - DELETE (lazy fetch) ==="
-          echo "DELETE FROM test_table WHERE id = 3;" | isql -v -k "$CONN" 2>&1
-
-          echo "=== Test 9: SELECT after DELETE ==="
-          echo "SELECT COUNT(*) AS row_count FROM test_table;" | isql -v -k "$CONN" 2>&1
-
-          echo "=== Test 10: DDL - DROP TABLE (lazy fetch) ==="
-          echo "DROP TABLE test_table;" | isql -v -k "$CONN" 2>&1
+          echo "=== Test 4: DDL/DML across connections ==="
+          echo "CREATE TABLE cross_conn_test (id INTEGER, val VARCHAR);" | isql -v -k "$CONN"
+          echo "INSERT INTO cross_conn_test VALUES (1, 'hello');" | isql -v -k "$CONN"
+          echo "SELECT id, val FROM cross_conn_test;" | isql -v -k "$CONN"
+          echo "DROP TABLE cross_conn_test;" | isql -v -k "$CONN"
 
           echo "=== All integration tests completed ==="
 

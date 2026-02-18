@@ -29,6 +29,7 @@ private:
   std::shared_ptr<odbcabstraction::ResultSet> current_result_set_;
   std::shared_ptr<arrow::flight::sql::PreparedStatement> prepared_statement_;
   const odbcabstraction::MetadataSettings& metadata_settings_;
+  long update_count_ = -1;
 
   std::shared_ptr<odbcabstraction::ResultSet>
   GetTables(const std::string *catalog_name, const std::string *schema_name,

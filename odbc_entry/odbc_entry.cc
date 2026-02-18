@@ -917,9 +917,10 @@ SQLRETURN SQL_API SQLColAttributeW(SQLHSTMT hStmt, SQLUSMALLINT colNum,
 SQLRETURN SQL_API SQLRowCount(SQLHSTMT hStmt, SQLLEN *rowCount) {
   return ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
-        // The SPI statement doesn't expose update count directly through
-        // ODBCStatement, so return 0 (no update count available).
-        if (rowCount) *rowCount = 0;
+        if (rowCount) {
+          long count = ODBCStatement::of(hStmt)->GetUpdateCount();
+          *rowCount = (count >= 0) ? static_cast<SQLLEN>(count) : 0;
+        }
         return SQL_SUCCESS;
       });
 }

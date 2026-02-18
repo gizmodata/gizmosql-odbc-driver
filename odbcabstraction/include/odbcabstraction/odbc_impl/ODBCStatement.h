@@ -98,6 +98,8 @@ class ODBCStatement : public ODBCHandle<ODBCStatement> {
     void GetPrimaryKeys(const std::string* catalog, const std::string* schema, const std::string* table);
     void Cancel();
 
+    long GetUpdateCount();
+
   private:
     ODBCConnection& m_connection;
     std::shared_ptr<driver::odbcabstraction::Statement> m_spiStatement;

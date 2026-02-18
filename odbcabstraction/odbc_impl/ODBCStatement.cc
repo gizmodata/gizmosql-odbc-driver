@@ -746,3 +746,7 @@ void ODBCStatement::GetPrimaryKeys(const std::string* catalog, const std::string
 void ODBCStatement::Cancel() {
   m_spiStatement->Cancel();
 }
+
+long ODBCStatement::GetUpdateCount() {
+  return m_spiStatement->GetUpdateCount();
+}
