@@ -177,10 +177,15 @@ static void FillFunctionBitmap(SQLUSMALLINT *bitmap) {
 // Handle Management
 // ============================================================================
 
-extern "C" {
+// Internal (static) implementations — these are NOT subject to symbol
+// interposition by the Driver Manager.  The exported SQLAllocHandle /
+// SQLFreeHandle entry points AND the ODBC 2.x compatibility wrappers
+// (SQLAllocEnv, SQLAllocConnect, …) all call these directly, so the DM
+// can never hijack the internal call chain.
 
-SQLRETURN SQL_API SQLAllocHandle(SQLSMALLINT handleType, SQLHANDLE inputHandle,
-                                SQLHANDLE *outputHandle) {
+static SQLRETURN AllocHandleImpl(SQLSMALLINT handleType,
+                                 SQLHANDLE inputHandle,
+                                 SQLHANDLE *outputHandle) {
   switch (handleType) {
   case SQL_HANDLE_ENV: {
     auto driver = gizmosql::odbc::GetGlobalDriver();
@@ -217,7 +222,7 @@ SQLRETURN SQL_API SQLAllocHandle(SQLSMALLINT handleType, SQLHANDLE inputHandle,
   }
 }
 
-SQLRETURN SQL_API SQLFreeHandle(SQLSMALLINT handleType, SQLHANDLE handle) {
+static SQLRETURN FreeHandleImpl(SQLSMALLINT handleType, SQLHANDLE handle) {
   if (!handle) return SQL_INVALID_HANDLE;
 
   switch (handleType) {
@@ -249,6 +254,17 @@ SQLRETURN SQL_API SQLFreeHandle(SQLSMALLINT handleType, SQLHANDLE handle) {
   }
 }
 
+extern "C" {
+
+SQLRETURN SQL_API SQLAllocHandle(SQLSMALLINT handleType, SQLHANDLE inputHandle,
+                                SQLHANDLE *outputHandle) {
+  return AllocHandleImpl(handleType, inputHandle, outputHandle);
+}
+
+SQLRETURN SQL_API SQLFreeHandle(SQLSMALLINT handleType, SQLHANDLE handle) {
+  return FreeHandleImpl(handleType, handle);
+}
+
 SQLRETURN SQL_API SQLFreeStmt(SQLHSTMT hStmt, SQLUSMALLINT option) {
   switch (option) {
   case SQL_CLOSE:
@@ -268,34 +284,35 @@ SQLRETURN SQL_API SQLFreeStmt(SQLHSTMT hStmt, SQLUSMALLINT option) {
     // No parameter support — no-op.
     return SQL_SUCCESS;
   case SQL_DROP:
-    return SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+    return FreeHandleImpl(SQL_HANDLE_STMT, hStmt);
   default:
     return SQL_ERROR;
   }
 }
 
-// ODBC 2.x compatibility wrappers
+// ODBC 2.x compatibility wrappers — call internal functions directly
+// to avoid symbol interposition by the Driver Manager.
 SQLRETURN SQL_API SQLAllocEnv(SQLHENV *phEnv) {
-  return SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE,
-                        reinterpret_cast<SQLHANDLE *>(phEnv));
+  return AllocHandleImpl(SQL_HANDLE_ENV, SQL_NULL_HANDLE,
+                         reinterpret_cast<SQLHANDLE *>(phEnv));
 }
 
 SQLRETURN SQL_API SQLAllocConnect(SQLHENV hEnv, SQLHDBC *phDbc) {
-  return SQLAllocHandle(SQL_HANDLE_DBC, hEnv,
-                        reinterpret_cast<SQLHANDLE *>(phDbc));
+  return AllocHandleImpl(SQL_HANDLE_DBC, hEnv,
+                         reinterpret_cast<SQLHANDLE *>(phDbc));
 }
 
 SQLRETURN SQL_API SQLAllocStmt(SQLHDBC hDbc, SQLHSTMT *phStmt) {
-  return SQLAllocHandle(SQL_HANDLE_STMT, hDbc,
-                        reinterpret_cast<SQLHANDLE *>(phStmt));
+  return AllocHandleImpl(SQL_HANDLE_STMT, hDbc,
+                         reinterpret_cast<SQLHANDLE *>(phStmt));
 }
 
 SQLRETURN SQL_API SQLFreeEnv(SQLHENV hEnv) {
-  return SQLFreeHandle(SQL_HANDLE_ENV, hEnv);
+  return FreeHandleImpl(SQL_HANDLE_ENV, hEnv);
 }
 
 SQLRETURN SQL_API SQLFreeConnect(SQLHDBC hDbc) {
-  return SQLFreeHandle(SQL_HANDLE_DBC, hDbc);
+  return FreeHandleImpl(SQL_HANDLE_DBC, hDbc);
 }
 
 // ============================================================================

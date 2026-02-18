@@ -59,8 +59,12 @@ if (APPLE)
         LINK_FLAGS "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/exports/gizmosql-odbc.exports"
     )
 elseif (UNIX)
+    # -Bsymbolic-functions: resolve internal function calls to the library's
+    # own definitions, preventing the ODBC Driver Manager from intercepting
+    # calls between our exported ODBC functions (e.g. SQLAllocConnect calling
+    # SQLAllocHandle internally).
     set_target_properties(gizmosql-odbc PROPERTIES
-        LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports/gizmosql-odbc.map"
+        LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports/gizmosql-odbc.map -Wl,-Bsymbolic-functions"
     )
 endif()
 
