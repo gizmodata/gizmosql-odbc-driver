@@ -203,6 +203,66 @@ jobs:
           echo "ODBCSYSINI=/tmp" >> $GITHUB_ENV
           echo "ODBCINI=/tmp/odbc.ini" >> $GITHUB_ENV
 
+      - name: Debug driver and ODBC configuration
+        run: |
+          echo "=== Driver shared library dependencies ==="
+          ldd /tmp/libgizmosql-odbc.so || true
+
+          echo ""
+          echo "=== ODBC configuration ==="
+          odbcinst -j
+
+          echo ""
+          echo "=== Contents of /tmp/odbcinst.ini ==="
+          cat -A /tmp/odbcinst.ini
+
+          echo ""
+          echo "=== Contents of /tmp/odbc.ini ==="
+          cat -A /tmp/odbc.ini
+
+          echo ""
+          echo "=== Test dlopen/dlsym directly ==="
+          python3 -c "
+          import ctypes
+          try:
+              lib = ctypes.CDLL('/tmp/libgizmosql-odbc.so')
+              print('Driver loaded successfully')
+              print('SQLAllocHandle:', lib.SQLAllocHandle)
+              print('SQLSetEnvAttr:', lib.SQLSetEnvAttr)
+              print('SQLDriverConnect:', lib.SQLDriverConnect)
+
+              # Test ENV allocation
+              import ctypes.util
+              SQL_HANDLE_ENV = 1
+              SQL_HANDLE_DBC = 2
+              SQL_NULL_HANDLE = 0
+              SQL_ATTR_ODBC_VERSION = 200
+              SQL_OV_ODBC3 = 3
+
+              henv = ctypes.c_void_p()
+              rc = lib.SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, ctypes.byref(henv))
+              print(f'SQLAllocHandle(ENV) returned: {rc}, henv={henv.value}')
+
+              rc = lib.SQLSetEnvAttr(henv, SQL_ATTR_ODBC_VERSION, SQL_OV_ODBC3, 0)
+              print(f'SQLSetEnvAttr(ODBC_VERSION) returned: {rc}')
+
+              hdbc = ctypes.c_void_p()
+              rc = lib.SQLAllocHandle(SQL_HANDLE_DBC, henv, ctypes.byref(hdbc))
+              print(f'SQLAllocHandle(DBC) returned: {rc}, hdbc={hdbc.value}')
+
+              if rc != 0:
+                  # Try to get diagnostics
+                  SQL_HANDLE_ENV_TYPE = 1
+                  buf = ctypes.create_string_buffer(1024)
+                  state = ctypes.create_string_buffer(6)
+                  native_err = ctypes.c_int()
+                  msg_len = ctypes.c_short()
+                  drc = lib.SQLGetDiagRec(SQL_HANDLE_ENV_TYPE, henv, 1, state, ctypes.byref(native_err), buf, 1024, ctypes.byref(msg_len))
+                  print(f'Diagnostic: state={state.value}, msg={buf.value[:msg_len.value]}')
+          except Exception as e:
+              print(f'Error: {e}')
+          "
+
       - name: Run integration tests with isql
         run: |
           CONN="Driver=/tmp/libgizmosql-odbc.so;host=localhost;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false"
