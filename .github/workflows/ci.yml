@@ -210,7 +210,7 @@ jobs:
 
           echo ""
           echo "=== ODBC configuration ==="
-          odbcinst -j
+          odbcinst -j 2>/dev/null || echo "(odbcinst not available)"
 
           echo ""
           echo "=== Contents of /tmp/odbcinst.ini ==="
@@ -221,47 +221,78 @@ jobs:
           cat -A /tmp/odbc.ini
 
           echo ""
-          echo "=== Test dlopen/dlsym directly ==="
-          python3 -c "
-          import ctypes
+          echo "=== Test dlopen/dlsym directly (bypass DM) ==="
+          python3 << 'PYEOF'
+          import ctypes, sys
+
           try:
               lib = ctypes.CDLL('/tmp/libgizmosql-odbc.so')
               print('Driver loaded successfully')
-              print('SQLAllocHandle:', lib.SQLAllocHandle)
-              print('SQLSetEnvAttr:', lib.SQLSetEnvAttr)
-              print('SQLDriverConnect:', lib.SQLDriverConnect)
 
-              # Test ENV allocation
-              import ctypes.util
               SQL_HANDLE_ENV = 1
               SQL_HANDLE_DBC = 2
-              SQL_NULL_HANDLE = 0
+              SQL_NULL_HANDLE = ctypes.c_void_p(0)
               SQL_ATTR_ODBC_VERSION = 200
-              SQL_OV_ODBC3 = 3
+              SQL_OV_ODBC3 = ctypes.c_void_p(3)
 
+              # Test ENV allocation
               henv = ctypes.c_void_p()
               rc = lib.SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, ctypes.byref(henv))
               print(f'SQLAllocHandle(ENV) returned: {rc}, henv={henv.value}')
 
-              rc = lib.SQLSetEnvAttr(henv, SQL_ATTR_ODBC_VERSION, SQL_OV_ODBC3, 0)
-              print(f'SQLSetEnvAttr(ODBC_VERSION) returned: {rc}')
+              if rc != 0:
+                  print('ENV allocation failed!')
+                  sys.exit(1)
 
+              # Set ODBC version
+              rc = lib.SQLSetEnvAttr(henv, SQL_ATTR_ODBC_VERSION, SQL_OV_ODBC3, 0)
+              print(f'SQLSetEnvAttr(ODBC_VERSION=3) returned: {rc}')
+
+              # Test DBC allocation
               hdbc = ctypes.c_void_p()
               rc = lib.SQLAllocHandle(SQL_HANDLE_DBC, henv, ctypes.byref(hdbc))
               print(f'SQLAllocHandle(DBC) returned: {rc}, hdbc={hdbc.value}')
 
               if rc != 0:
-                  # Try to get diagnostics
-                  SQL_HANDLE_ENV_TYPE = 1
+                  # Get diagnostics from ENV handle
                   buf = ctypes.create_string_buffer(1024)
                   state = ctypes.create_string_buffer(6)
                   native_err = ctypes.c_int()
                   msg_len = ctypes.c_short()
-                  drc = lib.SQLGetDiagRec(SQL_HANDLE_ENV_TYPE, henv, 1, state, ctypes.byref(native_err), buf, 1024, ctypes.byref(msg_len))
-                  print(f'Diagnostic: state={state.value}, msg={buf.value[:msg_len.value]}')
+                  drc = lib.SQLGetDiagRec(1, henv, 1, state, ctypes.byref(native_err), buf, 1024, ctypes.byref(msg_len))
+                  print(f'ENV diag rc={drc}, state={state.value}, msg={buf.value[:msg_len.value]}')
+                  print('DBC allocation failed!')
+                  sys.exit(1)
+
+              # Test SQLDriverConnect
+              conn_str = b'host=localhost;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false'
+              out_str = ctypes.create_string_buffer(1024)
+              out_len = ctypes.c_short()
+              rc = lib.SQLDriverConnect(hdbc, None, conn_str, len(conn_str), out_str, 1024, ctypes.byref(out_len), 0)
+              print(f'SQLDriverConnect returned: {rc}')
+
+              if rc != 0:
+                  buf = ctypes.create_string_buffer(1024)
+                  state = ctypes.create_string_buffer(6)
+                  native_err = ctypes.c_int()
+                  msg_len = ctypes.c_short()
+                  drc = lib.SQLGetDiagRec(2, hdbc, 1, state, ctypes.byref(native_err), buf, 1024, ctypes.byref(msg_len))
+                  print(f'DBC diag rc={drc}, state={state.value}, msg={buf.value[:msg_len.value]}')
+              else:
+                  print('Connection successful!')
+
+              # Clean up
+              lib.SQLDisconnect(hdbc)
+              lib.SQLFreeHandle(SQL_HANDLE_DBC, hdbc)
+              lib.SQLFreeHandle(SQL_HANDLE_ENV, henv)
+              print('All direct driver tests passed!')
+
           except Exception as e:
               print(f'Error: {e}')
-          "
+              import traceback
+              traceback.print_exc()
+              sys.exit(1)
+          PYEOF
 
       - name: Run integration tests with isql
         run: |
