@@ -182,15 +182,17 @@ jobs:
           done
           echo "GizmoSQL did not start in time" && exit 1
 
-      - name: Register driver in odbcinst.ini
+      - name: Register driver and DSN
         run: |
-          cat > /tmp/odbcinst.ini << 'EOF'
+          # Write driver registration to system location
+          sudo tee /etc/odbcinst.ini > /dev/null << 'EOF'
           [GizmoSQL ODBC Driver]
           Description = GizmoSQL ODBC Driver
           Driver      = /tmp/libgizmosql-odbc.so
           EOF
 
-          cat > /tmp/odbc.ini << 'EOF'
+          # Write DSN to user location
+          cat > ~/.odbc.ini << 'EOF'
           [GizmoSQL Test]
           Driver        = GizmoSQL ODBC Driver
           host          = localhost
@@ -199,9 +201,6 @@ jobs:
           pwd           = gizmosql_password
           useEncryption = false
           EOF
-
-          echo "ODBCSYSINI=/tmp" >> $GITHUB_ENV
-          echo "ODBCINI=/tmp/odbc.ini" >> $GITHUB_ENV
 
       - name: Debug driver and ODBC configuration
         run: |
@@ -213,12 +212,12 @@ jobs:
           odbcinst -j 2>/dev/null || echo "(odbcinst not available)"
 
           echo ""
-          echo "=== Contents of /tmp/odbcinst.ini ==="
-          cat -A /tmp/odbcinst.ini
+          echo "=== Contents of /etc/odbcinst.ini ==="
+          cat -A /etc/odbcinst.ini || true
 
           echo ""
-          echo "=== Contents of /tmp/odbc.ini ==="
-          cat -A /tmp/odbc.ini
+          echo "=== Contents of ~/.odbc.ini ==="
+          cat -A ~/.odbc.ini || true
 
           echo ""
           echo "=== Test dlopen/dlsym directly (bypass DM) ==="
@@ -298,11 +297,11 @@ jobs:
         run: |
           CONN="Driver=/tmp/libgizmosql-odbc.so;host=localhost;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false"
 
-          echo "=== Test 1: Basic SELECT via DSN ==="
-          echo "SELECT 1 AS test_value;" | isql -v "GizmoSQL Test" 2>&1
-
-          echo "=== Test 2: Basic SELECT via connection string ==="
+          echo "=== Test 1: Basic SELECT via connection string ==="
           echo "SELECT 42 AS answer;" | isql -v -k "$CONN" 2>&1
+
+          echo "=== Test 2: Basic SELECT via DSN ==="
+          echo "SELECT 1 AS test_value;" | isql -v "GizmoSQL Test" 2>&1
 
           echo "=== Test 3: DDL - CREATE TABLE (lazy fetch) ==="
           echo "CREATE TABLE test_table (id INTEGER, name VARCHAR, value DOUBLE);" | isql -v -k "$CONN" 2>&1
