@@ -95,18 +95,11 @@ jobs:
           if-no-files-found: error
 
   build-windows:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            triplet: x64-windows-static-md
-            cmake_arch: x64
-          - arch: arm64
-            triplet: arm64-windows-static-md
-            cmake_arch: ARM64
+    # NOTE: ARM64 Windows disabled — Arrow 23 cross-compilation includes SSE
+    # headers (xmmintrin.h/emmintrin.h) even with ARROW_SIMD_LEVEL=NONE.
+    # x64 binary works on ARM64 Windows via emulation.
     runs-on: windows-2022
-    name: Build Windows (${{ matrix.arch }})
+    name: Build Windows (x64)
     steps:
       - uses: actions/checkout@v4
 
@@ -142,7 +135,7 @@ jobs:
         env:
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install --triplet ${{ matrix.triplet }} --clean-after-build --x-install-root="$env:VCPKG_INSTALLATION_ROOT\installed"
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install --triplet x64-windows-static-md --clean-after-build --x-install-root="$env:VCPKG_INSTALLATION_ROOT\installed"
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -152,10 +145,10 @@ jobs:
           cmake -B build `
             -DARROW_GIT_REPOSITORY=https://github.com/apache/arrow.git `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static-md `
             -DVCPKG_MANIFEST_MODE=OFF `
             -G "Visual Studio 17 2022" `
-            -A ${{ matrix.cmake_arch }} `
+            -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER_LAUNCHER=sccache `
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
@@ -166,7 +159,7 @@ jobs:
       - name: Upload shared library
         uses: actions/upload-artifact@v4
         with:
-          name: gizmosql-odbc-windows-${{ matrix.arch }}.dll
+          name: gizmosql-odbc-windows-x64.dll
           path: build/Release/**/gizmosql-odbc.dll
           if-no-files-found: error
 
@@ -279,11 +272,8 @@ jobs:
   sign-windows:
     needs: build-windows
     if: startsWith(github.ref, 'refs/tags/v')
-    strategy:
-      matrix:
-        arch: [x64, arm64]
     runs-on: windows-latest
-    name: Sign Windows (${{ matrix.arch }})
+    name: Sign Windows (x64)
     environment: production
     permissions:
       id-token: write
@@ -292,7 +282,7 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: gizmosql-odbc-windows-${{ matrix.arch }}.dll
+          name: gizmosql-odbc-windows-x64.dll
           path: unsigned
 
       - name: Azure login via OIDC
@@ -322,18 +312,15 @@ jobs:
       - name: Upload signed artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gizmosql-odbc-windows-${{ matrix.arch }}-signed.dll
+          name: gizmosql-odbc-windows-x64-signed.dll
           path: unsigned/**/*.dll
           if-no-files-found: error
 
   build-msi:
     needs: sign-windows
     if: startsWith(github.ref, 'refs/tags/v')
-    strategy:
-      matrix:
-        arch: [x64, arm64]
     runs-on: windows-latest
-    name: Build MSI (${{ matrix.arch }})
+    name: Build MSI (x64)
     environment: production
     permissions:
       id-token: write
@@ -344,7 +331,7 @@ jobs:
       - name: Download signed DLL
         uses: actions/download-artifact@v4
         with:
-          name: gizmosql-odbc-windows-${{ matrix.arch }}-signed.dll
+          name: gizmosql-odbc-windows-x64-signed.dll
           path: installer/bin
 
       - name: Install WiX Toolset
@@ -381,7 +368,7 @@ jobs:
           wix build `
             "${{ github.workspace }}\installer\GizmoSqlOdbc.wxs" `
             -bindpath:BinDir="${{ github.workspace }}\installer\bin" `
-            -o "${{ github.workspace }}\installer\GizmoSQL-ODBC-Driver-${{ matrix.arch }}.msi" `
+            -o "${{ github.workspace }}\installer\GizmoSQL-ODBC-Driver-x64.msi" `
             -ext WixToolset.UI.wixext
 
       - name: Azure login via OIDC
@@ -404,13 +391,13 @@ jobs:
             --timestamp-digest sha256 `
             --file-digest sha256 `
             --verbose `
-            "${{ github.workspace }}\installer\GizmoSQL-ODBC-Driver-${{ matrix.arch }}.msi"
+            "${{ github.workspace }}\installer\GizmoSQL-ODBC-Driver-x64.msi"
 
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: GizmoSQL-ODBC-Driver-${{ matrix.arch }}.msi
-          path: installer/GizmoSQL-ODBC-Driver-${{ matrix.arch }}.msi
+          name: GizmoSQL-ODBC-Driver-x64.msi
+          path: installer/GizmoSQL-ODBC-Driver-x64.msi
           if-no-files-found: error
 
   release:
@@ -441,11 +428,8 @@ jobs:
           # Windows signed artifacts (prefer signed over unsigned)
           find artifacts -name "*windows*x64*signed*/*.dll" -exec cp {} release/gizmosql-odbc-windows-x64.dll \; 2>/dev/null || \
             find artifacts -name "*windows*x64*/*.dll" -exec cp {} release/gizmosql-odbc-windows-x64.dll \;
-          find artifacts -name "*windows*arm64*signed*/*.dll" -exec cp {} release/gizmosql-odbc-windows-arm64.dll \; 2>/dev/null || \
-            find artifacts -name "*windows*arm64*/*.dll" -exec cp {} release/gizmosql-odbc-windows-arm64.dll \;
-          # MSI installers
+          # MSI installer
           find artifacts -name "GizmoSQL-ODBC-Driver-x64.msi" -exec cp {} release/ \; 2>/dev/null
-          find artifacts -name "GizmoSQL-ODBC-Driver-arm64.msi" -exec cp {} release/ \; 2>/dev/null
 
       - name: Generate build provenance attestations
         uses: actions/attest-build-provenance@v2
