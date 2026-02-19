@@ -914,8 +914,7 @@ SQLRETURN SQL_API SQLColAttribute(SQLHSTMT hStmt, SQLUSMALLINT colNum,
         // string fields; for integer fields it's already written into charAttr
         // which we also copy to numericAttr.
         if (numericAttr && charAttr) {
-          *numericAttr = reinterpret_cast<SQLLEN>(
-              *reinterpret_cast<SQLLEN *>(charAttr));
+          *numericAttr = *reinterpret_cast<SQLLEN *>(charAttr);
         }
         return SQL_SUCCESS;
       });
