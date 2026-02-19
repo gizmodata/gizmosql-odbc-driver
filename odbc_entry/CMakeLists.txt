@@ -50,7 +50,7 @@ if (APPLE)
 elseif (UNIX)
     target_link_libraries(gizmosql-odbc PRIVATE -lodbcinst)
 elseif (WIN32)
-    target_link_libraries(gizmosql-odbc PRIVATE odbccp32)
+    target_link_libraries(gizmosql-odbc PRIVATE odbccp32 legacy_stdio_definitions)
 endif()
 
 # Symbol export control (macOS / Linux — Windows uses .def file)
