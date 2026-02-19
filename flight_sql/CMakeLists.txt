@@ -98,6 +98,10 @@ if (MSVC)
     -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-install
     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
   )
+  # Disable SIMD for ARM64 cross-compilation (SSE intrinsics are x86-only)
+  if (CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
+    list(APPEND ARROW_CMAKE_ARGS -DARROW_SIMD_LEVEL=NONE)
+  endif()
 elseif(APPLE)
   set(ARROW_CMAKE_ARGS
           -DARROW_FLIGHT=ON
