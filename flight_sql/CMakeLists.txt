@@ -146,9 +146,19 @@ set(ARROW_GIT_REPOSITORY "https://github.com/apache/arrow.git" CACHE STRING "Arr
 set(ARROW_GIT_TAG "apache-arrow-23.0.1" CACHE STRING "Tag for the Arrow repository")
 
 message("Using Arrow from ${ARROW_GIT_REPOSITORY} on tag ${ARROW_GIT_TAG}")
+
+# Pass compiler cache (sccache) through to Arrow's build if available
+if (CMAKE_C_COMPILER_LAUNCHER)
+  list(APPEND ARROW_CMAKE_ARGS -DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER})
+endif()
+if (CMAKE_CXX_COMPILER_LAUNCHER)
+  list(APPEND ARROW_CMAKE_ARGS -DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER})
+endif()
+
 ExternalProject_Add(ApacheArrow
   GIT_REPOSITORY ${ARROW_GIT_REPOSITORY}
   GIT_TAG ${ARROW_GIT_TAG}
+  GIT_SHALLOW TRUE
   SOURCE_SUBDIR "cpp"
   CMAKE_ARGS ${ARROW_CMAKE_ARGS})
 
