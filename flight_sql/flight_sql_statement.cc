@@ -43,9 +43,10 @@ namespace {
 
 void ClosePreparedStatementIfAny(
     std::shared_ptr<arrow::flight::sql::PreparedStatement>
-        &prepared_statement) {
+        &prepared_statement,
+    const FlightCallOptions &call_options) {
   if (prepared_statement != nullptr) {
-    ThrowIfNotOK(prepared_statement->Close());
+    ThrowIfNotOK(prepared_statement->Close(call_options));
     prepared_statement.reset();
   }
 }
@@ -64,6 +65,18 @@ FlightSqlStatement::FlightSqlStatement(
   attribute_[NOSCAN] = static_cast<size_t>(SQL_NOSCAN_OFF);
   attribute_[QUERY_TIMEOUT] = static_cast<size_t>(0);
   call_options_.timeout = TimeoutDuration{-1};
+}
+
+FlightSqlStatement::~FlightSqlStatement() {
+  // Explicitly close the prepared statement with auth headers before destruction.
+  // Arrow 23's PreparedStatement destructor calls Close() with empty options,
+  // which fails when the server requires authentication.
+  if (prepared_statement_ != nullptr) {
+    auto status = prepared_statement_->Close(call_options_);
+    // Ignore errors during destruction — the statement is going away regardless.
+    (void)status;
+    prepared_statement_.reset();
+  }
 }
 
 bool FlightSqlStatement::SetAttribute(StatementAttributeId attribute,
@@ -97,7 +110,7 @@ FlightSqlStatement::GetAttribute(StatementAttributeId attribute) {
 
 boost::optional<std::shared_ptr<ResultSetMetadata>>
 FlightSqlStatement::Prepare(const std::string &query) {
-  ClosePreparedStatementIfAny(prepared_statement_);
+  ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
   Result<std::shared_ptr<PreparedStatement>> result =
       sql_client_.Prepare(call_options_, query);
@@ -115,7 +128,7 @@ FlightSqlStatement::Prepare(const std::string &query) {
 bool FlightSqlStatement::ExecutePrepared() {
   assert(prepared_statement_.get() != nullptr);
 
-  Result<std::shared_ptr<FlightInfo>> result = prepared_statement_->Execute();
+  Result<std::shared_ptr<FlightInfo>> result = prepared_statement_->Execute(call_options_);
   ThrowIfNotOK(result.status());
 
   auto flight_info = result.ValueOrDie();
@@ -128,7 +141,7 @@ bool FlightSqlStatement::ExecutePrepared() {
 }
 
 bool FlightSqlStatement::Execute(const std::string &query) {
-  ClosePreparedStatementIfAny(prepared_statement_);
+  ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
   Result<std::shared_ptr<FlightInfo>> result =
       sql_client_.Execute(call_options_, query);
@@ -153,7 +166,7 @@ std::shared_ptr<odbcabstraction::ResultSet> FlightSqlStatement::GetTables(
     const std::string *catalog_name, const std::string *schema_name,
     const std::string *table_name, const std::string *table_type,
     const ColumnNames &column_names) {
-  ClosePreparedStatementIfAny(prepared_statement_);
+  ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
   std::vector<std::string> table_types;
 
@@ -211,7 +224,7 @@ std::shared_ptr<ResultSet> FlightSqlStatement::GetTables_V3(
 std::shared_ptr<ResultSet> FlightSqlStatement::GetColumns_V2(
     const std::string *catalog_name, const std::string *schema_name,
     const std::string *table_name, const std::string *column_name) {
-  ClosePreparedStatementIfAny(prepared_statement_);
+  ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
   Result<std::shared_ptr<FlightInfo>> result = sql_client_.GetTables(
       call_options_, catalog_name, schema_name, table_name, true, nullptr);
@@ -231,7 +244,7 @@ std::shared_ptr<ResultSet> FlightSqlStatement::GetColumns_V2(
 std::shared_ptr<ResultSet> FlightSqlStatement::GetColumns_V3(
     const std::string *catalog_name, const std::string *schema_name,
     const std::string *table_name, const std::string *column_name) {
-  ClosePreparedStatementIfAny(prepared_statement_);
+  ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
   Result<std::shared_ptr<FlightInfo>> result = sql_client_.GetTables(
       call_options_, catalog_name, schema_name, table_name, true, nullptr);
@@ -249,7 +262,7 @@ std::shared_ptr<ResultSet> FlightSqlStatement::GetColumns_V3(
 }
 
 std::shared_ptr<ResultSet> FlightSqlStatement::GetTypeInfo_V2(int16_t data_type) {
-  ClosePreparedStatementIfAny(prepared_statement_);
+  ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
   Result<std::shared_ptr<FlightInfo>> result = sql_client_.GetXdbcTypeInfo(
           call_options_);
@@ -267,7 +280,7 @@ std::shared_ptr<ResultSet> FlightSqlStatement::GetTypeInfo_V2(int16_t data_type)
 }
 
 std::shared_ptr<ResultSet> FlightSqlStatement::GetTypeInfo_V3(int16_t data_type) {
-  ClosePreparedStatementIfAny(prepared_statement_);
+  ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
   Result<std::shared_ptr<FlightInfo>> result = sql_client_.GetXdbcTypeInfo(
           call_options_);
@@ -287,7 +300,7 @@ std::shared_ptr<ResultSet> FlightSqlStatement::GetTypeInfo_V3(int16_t data_type)
 std::shared_ptr<ResultSet> FlightSqlStatement::GetPrimaryKeys(
     const std::string *catalog_name, const std::string *schema_name,
     const std::string *table_name) {
-  ClosePreparedStatementIfAny(prepared_statement_);
+  ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
   auto schema = arrow::schema({
     arrow::field("TABLE_CAT", arrow::utf8(), true),      // nullable
@@ -314,7 +327,7 @@ std::shared_ptr<ResultSet> FlightSqlStatement::GetForeignKeys(
     const std::string *pk_catalog_name, const std::string *pk_schema_name,
     const std::string *pk_table_name, const std::string *fk_catalog_name,
     const std::string *fk_schema_name, const std::string *fk_table_name) {
-  ClosePreparedStatementIfAny(prepared_statement_);
+  ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
   auto schema = arrow::schema({
     arrow::field("PKTABLE_CAT", arrow::utf8(), true),     // nullable

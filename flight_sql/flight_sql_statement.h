@@ -43,6 +43,8 @@ public:
       arrow::flight::FlightCallOptions call_options,
       const odbcabstraction::MetadataSettings& metadata_settings);
 
+  ~FlightSqlStatement() override;
+
   bool SetAttribute(StatementAttributeId attribute, const Attribute &value) override;
 
   boost::optional<Attribute> GetAttribute(StatementAttributeId attribute) override;

@@ -230,7 +230,7 @@ bool FlightSqlResultSet::GetData(int column_n, int16_t target_type,
   if (value_offset == -1) {
     return false;
   }
-  
+
   ColumnBinding binding(ConvertCDataTypeFromV2ToV3(target_type), precision, scale, buffer, buffer_length,
                         strlen_buffer);
 
@@ -243,8 +243,11 @@ bool FlightSqlResultSet::GetData(int column_n, int16_t target_type,
   // fetched, we need to subtract one from the current row.
   accessor->GetColumnarData(&binding, current_row_ - 1, 1, value_offset, true, diagnostics_, nullptr);
 
-  // If there was truncation, the converter would have reported it to the diagnostics.
-  return diagnostics_.HasWarning();
+  // Return true = data was fetched (caller maps to SQL_SUCCESS).
+  // Truncation warnings are reported via diagnostics and the ODBC handle
+  // wrapper upgrades SQL_SUCCESS to SQL_SUCCESS_WITH_INFO automatically.
+  // Return false only when value_offset == -1 (no more data, SQL_NO_DATA).
+  return true;
 }
 
 std::shared_ptr<ResultSetMetadata> FlightSqlResultSet::GetMetadata() {
