@@ -579,7 +579,7 @@ jobs:
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: GizmoSQL-ODBC-Driver-x64.msi
+          name: GizmoSQL-ODBC-Driver-x64-msi.zip
           path: installer/GizmoSQL-ODBC-Driver-x64.msi
           if-no-files-found: error
 
@@ -613,7 +613,7 @@ jobs:
           find artifacts/gizmosql-odbc-windows-x64-signed.dll -type f -name "*.dll" -exec cp {} release/gizmosql-odbc-windows-x64.dll \; 2>/dev/null || \
             find artifacts/gizmosql-odbc-windows-x64.dll -type f -name "*.dll" -exec cp {} release/gizmosql-odbc-windows-x64.dll \;
           # MSI installer
-          find artifacts/GizmoSQL-ODBC-Driver-x64.msi -type f -name "*.msi" -exec cp {} release/ \; 2>/dev/null
+          find artifacts/GizmoSQL-ODBC-Driver-x64-msi.zip -type f -name "*.msi" -exec cp {} release/ \; 2>/dev/null
           ls -la release/
 
       - name: Generate build provenance attestations
