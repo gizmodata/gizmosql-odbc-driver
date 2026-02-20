@@ -360,7 +360,9 @@ jobs:
           path: installer/bin
 
       - name: Install WiX Toolset
-        run: dotnet tool install --global wix
+        run: |
+          dotnet tool install --global wix
+          wix extension add WixToolset.UI.wixext
 
       - name: Convert logo to BMP for installer dialogs
         run: |
