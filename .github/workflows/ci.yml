@@ -263,13 +263,13 @@ jobs:
 
           echo "=== Test 3: DDL/DML round-trip (single session) ==="
           run_isql "DDL/DML round-trip" isql -v -k "$CONN" << 'SQL'
-          CREATE TABLE test_table (id INTEGER, name VARCHAR, value DOUBLE, created_date DATE, created_ts TIMESTAMP)
+          CREATE TABLE test_table (id INTEGER, name VARCHAR, value DOUBLE, created_date DATE, created_timestamp TIMESTAMP)
           INSERT INTO test_table VALUES (1, 'alice', 3.14, '2025-01-15', '2025-01-15 10:30:00')
           INSERT INTO test_table VALUES (2, 'bob', 2.72, '2025-06-20', '2025-06-20 14:45:30')
           INSERT INTO test_table VALUES (3, 'charlie', 1.41, '2025-12-25', '2025-12-25 23:59:59')
-          SELECT id, name, value, created_date, created_ts FROM test_table ORDER BY id
-          UPDATE test_table SET value = 9.99, created_date = '2026-01-01', created_ts = '2026-01-01 00:00:00' WHERE id = 2
-          SELECT id, name, value, created_date, created_ts FROM test_table WHERE id = 2
+          SELECT id, name, value, created_date, created_timestamp FROM test_table ORDER BY id
+          UPDATE test_table SET value = 9.99, created_date = '2026-01-01', created_timestamp = '2026-01-01 00:00:00' WHERE id = 2
+          SELECT id, name, value, created_date, created_timestamp FROM test_table WHERE id = 2
           DELETE FROM test_table WHERE id = 3
           SELECT COUNT(*) AS row_count FROM test_table
           DROP TABLE test_table
@@ -277,9 +277,9 @@ jobs:
 
           echo "=== Test 4: Date and timestamp types ==="
           run_isql "Date/timestamp queries" isql -v -k "$CONN" << 'SQL'
-          SELECT DATE '2025-03-15' AS d, TIMESTAMP '2025-03-15 08:30:00' AS ts
-          SELECT CURRENT_DATE AS today
-          SELECT CAST('2025-12-31' AS DATE) AS year_end, CAST('2025-12-31 23:59:59' AS TIMESTAMP) AS midnight
+          SELECT DATE '2025-03-15' AS date_value, TIMESTAMP '2025-03-15 08:30:00' AS timestamp_value
+          SELECT CURRENT_DATE AS current_date_value
+          SELECT CAST('2025-12-31' AS DATE) AS year_end_date, CAST('2025-12-31 23:59:59' AS TIMESTAMP) AS year_end_timestamp
           SQL
 
           echo "=== Test 5: DDL/DML across connections ==="
