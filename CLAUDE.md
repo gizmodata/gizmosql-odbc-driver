@@ -3,11 +3,11 @@
 ## Build
 
 ```bash
-# macOS (requires: brew install cmake boost libiodbc grpc protobuf openssl@3 rapidjson)
+# macOS (requires: brew install cmake boost libiodbc openssl@3 rapidjson)
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DOPENSSL_ROOT_DIR=$(brew --prefix openssl@3)
 cmake --build build --parallel $(sysctl -n hw.ncpu)
 
-# Linux (requires: cmake libboost-all-dev unixodbc-dev libgrpc++-dev libprotobuf-dev libssl-dev rapidjson-dev)
+# Linux (requires: cmake libboost-all-dev unixodbc-dev libssl-dev rapidjson-dev)
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel $(nproc)
 ```
@@ -56,6 +56,11 @@ When unixODBC DM loads the driver, internal calls between exported ODBC function
 
 ### SQLGetData Return Values
 `ResultSet::GetData()` returns `true` when data was fetched (maps to `SQL_SUCCESS`), `false` only when no more data is available (maps to `SQL_NO_DATA`). The ODBC handle wrapper automatically upgrades `SQL_SUCCESS` to `SQL_SUCCESS_WITH_INFO` when diagnostics contain truncation warnings.
+
+## Changelog
+- **Always update `CHANGELOG.md`** when making major changes, new features, bug fixes, or breaking changes
+- Follow [Keep a Changelog](https://keepachangelog.com/) format
+- Group changes under: Added, Changed, Fixed, Removed
 
 ## CI Notes
 - Windows uses `windows-2022` (not `windows-latest`) for sufficient disk space

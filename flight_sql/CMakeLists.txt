@@ -21,15 +21,14 @@ endif()
 # Add Zlib dependencies needed by Arrow Flight. Should be pre-installed unless provided by VCPKG.
 find_package(ZLIB REQUIRED)
 
-# Add Protobuf dependencies needed by Arrow Flight. Should be pre-installed.
+# Add Protobuf dependencies needed by Arrow Flight.
+# Only needed for MSVC/vcpkg — on macOS/Linux, Arrow BUNDLED provides protobuf.
 if (MSVC)
   set(Protobuf_USE_STATIC_LIBS ON)
-endif()
-# Use CONFIG mode first to avoid target conflicts with gRPC's protobuf dependency
-# (Homebrew protobuf >= 33.x defines upb targets that clash with CMake's FindProtobuf module)
-find_package(Protobuf CONFIG QUIET)
-if (NOT Protobuf_FOUND)
-  find_package(Protobuf REQUIRED)
+  find_package(Protobuf CONFIG QUIET)
+  if (NOT Protobuf_FOUND)
+    find_package(Protobuf REQUIRED)
+  endif()
 endif()
 
 # Add OpenSSL dependencies needed by Arrow Flight. Should be pre-installed.
@@ -68,8 +67,11 @@ if (UNIX AND NOT APPLE)
   endif()
 endif()
 
-# Add gRPC dependencies needed by Arrow Flight. Should be pre-installed.
-find_package(gRPC 1.36 CONFIG REQUIRED)
+# Add gRPC dependencies needed by Arrow Flight.
+# Only needed for MSVC/vcpkg — on macOS/Linux, Arrow BUNDLED provides gRPC.
+if (MSVC)
+  find_package(gRPC 1.36 CONFIG REQUIRED)
+endif()
 
 find_package(RapidJSON CONFIG REQUIRED)
 include_directories(${RapidJSON_INCLUDE_DIRS})
@@ -119,7 +121,7 @@ elseif(APPLE)
           -DVCPKG_MANIFEST_MODE=OFF
           -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-install
           -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-          -DARROW_DEPENDENCY_SOURCE=AUTO
+          -DARROW_DEPENDENCY_SOURCE=BUNDLED
           )
   if (DEFINED OPENSSL_ROOT_DIR)
     list(APPEND ARROW_CMAKE_ARGS -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR})
@@ -140,10 +142,16 @@ else()
     -DARROW_DEPENDENCY_USE_SHARED=OFF
     -DCMAKE_DEPENDS_USE_COMPILER=FALSE
     -DOPENSSL_INCLUDE_DIR=${OPENSSL_INCLUDE_DIR}
-    -DARROW_DEPENDENCY_SOURCE=AUTO
+    -DARROW_DEPENDENCY_SOURCE=BUNDLED
     -DCMAKE_INSTALL_LIBDIR=lib
     -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-install
   )
+endif()
+
+# Arrow 23's bundled deps (c-ares, protobuf, abseil) use old cmake_minimum_required()
+# versions incompatible with CMake 4.x. This policy flag restores backward compat.
+if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.27")
+  list(APPEND ARROW_CMAKE_ARGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5)
 endif()
 
 set(ARROW_GIT_REPOSITORY "https://github.com/apache/arrow.git" CACHE STRING "Arrow repository path or URL")
@@ -159,12 +167,36 @@ if (CMAKE_CXX_COMPILER_LAUNCHER)
   list(APPEND ARROW_CMAKE_ARGS -DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER})
 endif()
 
+# Arrow 23's ThirdpartyToolchain.cmake calls set_target_properties on c-ares::cares
+# (an ALIAS target), which CMake 4.x rejects. Patch: remove the offending lines
+# and link libresolv ourselves (see APPLE block below).
+set(ARROW_PATCH_COMMAND
+  ${CMAKE_COMMAND} -DARROW_SOURCE_DIR=<SOURCE_DIR> -P ${CMAKE_CURRENT_SOURCE_DIR}/patch_arrow.cmake)
+
 ExternalProject_Add(ApacheArrow
   GIT_REPOSITORY ${ARROW_GIT_REPOSITORY}
   GIT_TAG ${ARROW_GIT_TAG}
   GIT_SHALLOW TRUE
   SOURCE_SUBDIR "cpp"
+  PATCH_COMMAND ${ARROW_PATCH_COMMAND}
   CMAKE_ARGS ${ARROW_CMAKE_ARGS})
+
+# Arrow 23's bundled_dependencies archive does not include abseil symbols.
+# After Arrow builds, merge all abseil .a files into a single archive that
+# we link separately. This step runs between build and install.
+if (NOT MSVC)
+  set(ABSL_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-build/_deps/absl-build")
+  set(ABSL_INSTALL_DIR "${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-install")
+  ExternalProject_Add_Step(ApacheArrow merge_abseil
+    COMMAND ${CMAKE_COMMAND}
+      -DABSL_BUILD_DIR=${ABSL_BUILD_DIR}
+      -DOUTPUT_LIB=${ABSL_INSTALL_DIR}/lib/libabsl_bundled.a
+      -DCMAKE_AR_TOOL=${CMAKE_AR}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/merge_abseil.cmake
+    DEPENDEES install
+    COMMENT "Merging abseil static libraries into single archive"
+  )
+endif()
 
 include_directories(BEFORE ${CMAKE_CURRENT_BINARY_DIR}/ApacheArrow-prefix/src/ApacheArrow-install/include)
 set(ARROW_LIB_DIR lib)
@@ -275,21 +307,29 @@ else()
     arrow_compute
     arrow
     arrow_bundled_dependencies
+    absl_bundled
   )
 endif()
 
 set(GIZMOSQL_ODBC_SPI_THIRDPARTY_LIBS
   ${ARROW_LIBS}
-  gRPC::grpc++
   ${ZLIB_LIBRARIES}
-  ${Protobuf_LIBRARIES}
   ${OPENSSL_LIBRARIES}
   ${RapidJSON_LIBRARIES}
 )
 
 if (MSVC)
+  # On MSVC/vcpkg, gRPC and Protobuf are separate system packages
+  list(APPEND GIZMOSQL_ODBC_SPI_THIRDPARTY_LIBS gRPC::grpc++ ${Protobuf_LIBRARIES})
   find_package(Boost REQUIRED COMPONENTS locale)
   list(APPEND GIZMOSQL_ODBC_SPI_THIRDPARTY_LIBS ${Boost_LIBRARIES})
+elseif(APPLE)
+  # c-ares requires libresolv on macOS. Arrow's bundled build normally sets this
+  # via set_target_properties on c-ares::cares, but that's an ALIAS target which
+  # CMake 4.x rejects. Link it directly instead.
+  # Abseil's time_zone_lookup uses CoreFoundation for local timezone detection.
+  find_library(CoreFoundation CoreFoundation)
+  list(APPEND GIZMOSQL_ODBC_SPI_THIRDPARTY_LIBS resolv ${CoreFoundation})
 endif()
 
 add_library(gizmosql_odbc_spi_impl ${GIZMOSQL_ODBC_SPI_SOURCES})
