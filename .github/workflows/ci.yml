@@ -159,6 +159,58 @@ jobs:
       - name: Build
         run: cmake --build build --parallel 8
 
+      - name: Verify DLL dependencies
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Path build -Filter gizmosql-odbc.dll -Recurse | Select-Object -First 1
+          Write-Host "DLL path: $($dll.FullName)"
+          Write-Host "DLL size: $([math]::Round($dll.Length / 1MB, 1)) MB"
+          Write-Host ""
+          Write-Host "=== dumpbin /dependents ==="
+          dumpbin /dependents $dll.FullName
+          Write-Host ""
+          Write-Host "=== Checking for unexpected dependencies ==="
+          $output = dumpbin /dependents $dll.FullName | Where-Object { $_ -match '^\s+\S+\.dll$' }
+          $unexpected = $output | Where-Object {
+            $dep = $_.Trim().ToUpper()
+            $dep -notmatch '^(KERNEL32|ADVAPI32|WS2_32|CRYPT32|SECUR32|BCRYPT|NCRYPT|IPHLPAPI|USERENV|SHLWAPI|USER32|GDI32|COMDLG32|SHELL32|OLE32|OLEAUT32|COMCTL32|RPCRT4)\.DLL$' -and
+            $dep -notmatch '^(VCRUNTIME140|VCRUNTIME140_1|MSVCP140|MSVCP140_1|MSVCP140_2)\.DLL$' -and
+            $dep -notmatch '^API-MS-WIN-CRT-'
+          }
+          if ($unexpected) {
+            Write-Host "WARNING: Unexpected dependencies found:"
+            $unexpected | ForEach-Object { Write-Host "  $_" }
+            Write-Host "These DLLs must be present at runtime or the driver will fail with error 126."
+          } else {
+            Write-Host "OK: Only expected Windows system and VC++ runtime dependencies found."
+          }
+
+      - name: Verify DLL loads correctly
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Path build -Filter gizmosql-odbc.dll -Recurse | Select-Object -First 1
+          Write-Host "Testing LoadLibrary on: $($dll.FullName)"
+          Add-Type -TypeDefinition @"
+          using System;
+          using System.Runtime.InteropServices;
+          public class NativeMethods {
+              [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+              public static extern IntPtr LoadLibraryW(string lpFileName);
+              [DllImport("kernel32.dll", SetLastError = true)]
+              [return: MarshalAs(UnmanagedType.Bool)]
+              public static extern bool FreeLibrary(IntPtr hModule);
+          }
+          "@
+          $handle = [NativeMethods]::LoadLibraryW($dll.FullName)
+          if ($handle -eq [IntPtr]::Zero) {
+            $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            Write-Error "LoadLibrary FAILED with Win32 error $err (0x$($err.ToString('X')))"
+            exit 1
+          }
+          Write-Host "LoadLibrary succeeded (handle: $handle)"
+          [NativeMethods]::FreeLibrary($handle) | Out-Null
+          Write-Host "DLL loads correctly — no missing dependencies."
+
       - name: Upload shared library
         uses: actions/upload-artifact@v4
         with:

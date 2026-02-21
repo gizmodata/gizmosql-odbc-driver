@@ -51,10 +51,8 @@ if (NOT DEFINED OPENSSL_ROOT_DIR AND APPLE AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 # This is based on Arrow's FindOpenSSL module. It's not clear if both variables
 # need to be set.
-if (NOT DEFINED MSVC)
-  set(OpenSSL_USE_STATIC_LIBS ON)
-  set(OPENSSL_USE_STATIC_LIBS ON)
-endif()
+set(OpenSSL_USE_STATIC_LIBS ON)
+set(OPENSSL_USE_STATIC_LIBS ON)
 find_package(OpenSSL REQUIRED)
 
 # OpenSSL depends on krb5 on some Linux distros (e.g. CentOS/RHEL).

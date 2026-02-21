@@ -14,3 +14,5 @@ Initial release.
 - Embedded VERSIONINFO resource in Windows DLL for ODBC Administrator version/company display
 - Explicit CloseSession RPC on disconnect to properly release server-side sessions
 - Server-side query cancellation via CancelFlightInfo RPC on SQLCancel
+- Force static OpenSSL linking on all platforms including MSVC to prevent DLL error 126
+- CI verification of Windows DLL dependencies via `dumpbin /dependents` and `LoadLibrary` smoke test
