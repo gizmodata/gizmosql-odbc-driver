@@ -131,11 +131,11 @@ bool FlightSqlStatement::ExecutePrepared() {
   Result<std::shared_ptr<FlightInfo>> result = prepared_statement_->Execute(call_options_);
   ThrowIfNotOK(result.status());
 
-  auto flight_info = result.ValueOrDie();
+  flight_info_ = result.ValueOrDie();
 
-  update_count_ = flight_info->total_records();
+  update_count_ = flight_info_->total_records();
   current_result_set_ = std::make_shared<FlightSqlResultSet>(
-      sql_client_, call_options_, flight_info, nullptr, diagnostics_, metadata_settings_);
+      sql_client_, call_options_, flight_info_, nullptr, diagnostics_, metadata_settings_);
 
   return true;
 }
@@ -147,11 +147,11 @@ bool FlightSqlStatement::Execute(const std::string &query) {
       sql_client_.Execute(call_options_, query);
   ThrowIfNotOK(result.status());
 
-  auto flight_info = result.ValueOrDie();
+  flight_info_ = result.ValueOrDie();
 
-  update_count_ = flight_info->total_records();
+  update_count_ = flight_info_->total_records();
   current_result_set_ = std::make_shared<FlightSqlResultSet>(
-      sql_client_, call_options_, flight_info, nullptr, diagnostics_, metadata_settings_);
+      sql_client_, call_options_, flight_info_, nullptr, diagnostics_, metadata_settings_);
 
   return true;
 }
@@ -364,6 +364,15 @@ odbcabstraction::Diagnostics &FlightSqlStatement::GetDiagnostics() {
 
 void FlightSqlStatement::Cancel() {
   if (!current_result_set_) return;
+
+  // Send CancelFlightInfo to the server to stop query execution
+  if (flight_info_) {
+    auto cancel_info = std::make_unique<FlightInfo>(*flight_info_);
+    arrow::flight::CancelFlightInfoRequest request(std::move(cancel_info));
+    auto result = sql_client_.CancelFlightInfo(call_options_, request);
+    (void)result; // Best-effort; ignore errors on cancel
+  }
+
   current_result_set_->Cancel();
 }
 
