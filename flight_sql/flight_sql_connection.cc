@@ -455,6 +455,13 @@ void FlightSqlConnection::Close() {
     throw DriverException("Connection already closed.");
   }
 
+  if (sql_client_) {
+    // Notify the server to close the session
+    arrow::flight::CloseSessionRequest request;
+    auto result = sql_client_->CloseSession(call_options_, request);
+    (void)result; // Best-effort; ignore errors on disconnect
+    sql_client_->Close();
+  }
   sql_client_.reset();
   closed_ = true;
   attribute_[CONNECTION_DEAD] = static_cast<uint32_t>(SQL_TRUE);

@@ -12,3 +12,4 @@ Initial release.
 - Apple notarized macOS dylib and Authenticode-signed Windows DLL
 - Windows MSI installer via WiX Toolset (64-bit)
 - Embedded VERSIONINFO resource in Windows DLL for ODBC Administrator version/company display
+- Explicit CloseSession RPC on disconnect to properly release server-side sessions
