@@ -15,4 +15,5 @@ Initial release.
 - Explicit CloseSession RPC on disconnect to properly release server-side sessions
 - Server-side query cancellation via CancelFlightInfo RPC on SQLCancel
 - Force static OpenSSL linking on all platforms including MSVC to prevent DLL error 126
+- Ship `msvcp140_codecvt_ids.dll` in MSI to fix DLL error 126 on machines without VC++ Redistributable
 - CI verification of Windows DLL dependencies via `dumpbin /dependents` and `LoadLibrary` smoke test

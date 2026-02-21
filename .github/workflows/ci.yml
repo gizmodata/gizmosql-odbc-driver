@@ -173,8 +173,8 @@ jobs:
           $output = dumpbin /dependents $dll.FullName | Where-Object { $_ -match '^\s+\S+\.dll$' }
           $unexpected = $output | Where-Object {
             $dep = $_.Trim().ToUpper()
-            $dep -notmatch '^(KERNEL32|ADVAPI32|WS2_32|CRYPT32|SECUR32|BCRYPT|NCRYPT|IPHLPAPI|USERENV|SHLWAPI|USER32|GDI32|COMDLG32|SHELL32|OLE32|OLEAUT32|COMCTL32|RPCRT4)\.DLL$' -and
-            $dep -notmatch '^(VCRUNTIME140|VCRUNTIME140_1|MSVCP140|MSVCP140_1|MSVCP140_2)\.DLL$' -and
+            $dep -notmatch '^(KERNEL32|ADVAPI32|WS2_32|WSOCK32|CRYPT32|SECUR32|BCRYPT|NCRYPT|IPHLPAPI|USERENV|SHLWAPI|USER32|GDI32|COMDLG32|SHELL32|OLE32|OLEAUT32|COMCTL32|RPCRT4|DBGHELP)\.DLL$' -and
+            $dep -notmatch '^(VCRUNTIME140|VCRUNTIME140_1|MSVCP140|MSVCP140_1|MSVCP140_2|MSVCP140_CODECVT_IDS)\.DLL$' -and
             $dep -notmatch '^API-MS-WIN-CRT-'
           }
           if ($unexpected) {
@@ -565,6 +565,7 @@ jobs:
           Copy-Item "$crtDir\vcruntime140.dll" installer\bin\
           Copy-Item "$crtDir\vcruntime140_1.dll" installer\bin\
           Copy-Item "$crtDir\msvcp140.dll" installer\bin\
+          Copy-Item "$crtDir\msvcp140_codecvt_ids.dll" installer\bin\
 
       - name: Install WiX Toolset
         run: |

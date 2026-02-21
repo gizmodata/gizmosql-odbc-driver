@@ -51,6 +51,7 @@
         <File Id="vcruntime140" Source="!(bindpath.BinDir)\vcruntime140.dll" />
         <File Id="vcruntime140_1" Source="!(bindpath.BinDir)\vcruntime140_1.dll" />
         <File Id="msvcp140" Source="!(bindpath.BinDir)\msvcp140.dll" KeyPath="yes" />
+        <File Id="msvcp140_codecvt_ids" Source="!(bindpath.BinDir)\msvcp140_codecvt_ids.dll" />
       </Component>
     </ComponentGroup>
 
