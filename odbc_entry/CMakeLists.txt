@@ -11,10 +11,16 @@ set(ODBC_ENTRY_SOURCES
     odbc_entry.cc
 )
 
-# On Windows, add the .def file for symbol exports and system_dsn.cc
+# On Windows, add the .def file for symbol exports and version resource
 if (WIN32)
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/version.rc.in
+        ${CMAKE_CURRENT_BINARY_DIR}/version.rc
+        @ONLY
+    )
     list(APPEND ODBC_ENTRY_SOURCES
         exports/gizmosql-odbc.def
+        ${CMAKE_CURRENT_BINARY_DIR}/version.rc
     )
 endif()
 

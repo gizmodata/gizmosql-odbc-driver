@@ -7,6 +7,12 @@
 cmake_minimum_required(VERSION 3.11)
 set(CMAKE_CXX_STANDARD 17)
 
+# Version — single source of truth for DLL resource and MSI installer
+set(GIZMOSQL_VERSION_MAJOR 1)
+set(GIZMOSQL_VERSION_MINOR 0)
+set(GIZMOSQL_VERSION_PATCH 0)
+set(GIZMOSQL_VERSION_TWEAK 0)
+
 project(gizmosql_odbc)
 
 # Add Boost dependencies. Should be pre-installed (Brew on Mac).

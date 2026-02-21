@@ -549,6 +549,7 @@ jobs:
         run: |
           wix build `
             "${{ github.workspace }}\installer\GizmoSqlOdbc.wxs" `
+            -arch x64 `
             -b BinDir="${{ github.workspace }}\installer\bin" `
             -b "${{ github.workspace }}\installer" `
             -o "${{ github.workspace }}\installer\GizmoSQL-ODBC-Driver-x64.msi" `
