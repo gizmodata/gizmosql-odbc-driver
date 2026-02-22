@@ -925,11 +925,17 @@ SQLRETURN SQL_API SQLColAttributeW(SQLHSTMT hStmt, SQLUSMALLINT colNum,
                                   SQLSMALLINT bufferLength,
                                   SQLSMALLINT *stringLength,
                                   SQLLEN *numericAttr) {
-  // The W variant — field values that are strings are returned as SQLWCHAR.
-  // ODBCDescriptor::GetField handles this if we pass the right buffer.
-  // For now, use the same path as ANSI since GetField writes strings into the buffer.
-  return SQLColAttribute(hStmt, colNum, fieldId, charAttr, bufferLength,
-                         stringLength, numericAttr);
+  return ODBCStatement::ExecuteWithDiagnostics(
+      hStmt, SQL_SUCCESS, [&]() {
+        auto *ird = ODBCStatement::of(hStmt)->GetIRD();
+        SQLINTEGER intLen = 0;
+        ird->GetField(colNum, fieldId, charAttr, bufferLength, &intLen, true);
+        if (stringLength) *stringLength = static_cast<SQLSMALLINT>(intLen);
+        if (numericAttr && charAttr) {
+          *numericAttr = *reinterpret_cast<SQLLEN *>(charAttr);
+        }
+        return SQL_SUCCESS;
+      });
 }
 
 SQLRETURN SQL_API SQLRowCount(SQLHSTMT hStmt, SQLLEN *rowCount) {
@@ -1025,8 +1031,16 @@ SQLRETURN SQL_API SQLGetDescFieldW(SQLHDESC hDesc, SQLSMALLINT recNum,
                                   SQLSMALLINT fieldId, SQLPOINTER value,
                                   SQLINTEGER bufferLength,
                                   SQLINTEGER *stringLength) {
-  return SQLGetDescField(hDesc, recNum, fieldId, value, bufferLength,
-                         stringLength);
+  return ODBCDescriptor::ExecuteWithDiagnostics(
+      hDesc, SQL_SUCCESS, [&]() {
+        auto *desc = ODBCDescriptor::of(hDesc);
+        if (recNum == 0) {
+          desc->GetHeaderField(fieldId, value, bufferLength, stringLength);
+        } else {
+          desc->GetField(recNum, fieldId, value, bufferLength, stringLength, true);
+        }
+        return SQL_SUCCESS;
+      });
 }
 
 SQLRETURN SQL_API SQLSetDescField(SQLHDESC hDesc, SQLSMALLINT recNum,

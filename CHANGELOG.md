@@ -17,3 +17,4 @@ Initial release.
 - Force static OpenSSL linking on all platforms including MSVC to prevent DLL error 126
 - Ship `msvcp140_codecvt_ids.dll` in MSI to fix DLL error 126 on machines without VC++ Redistributable
 - CI verification of Windows DLL dependencies via `dumpbin /dependents` and `LoadLibrary` smoke test
+- Fix `SQLColAttributeW` and `SQLGetDescFieldW` returning UTF-8 instead of UTF-16, which caused Power Query to display Chinese characters for column names and fall back to `SQL_C_BINARY` binding for all columns

@@ -262,7 +262,7 @@ void ODBCDescriptor::GetHeaderField(SQLSMALLINT fieldIdentifier, SQLPOINTER valu
   }
 }
 
-void ODBCDescriptor::GetField(SQLSMALLINT recordNumber, SQLSMALLINT fieldIdentifier, SQLPOINTER value, SQLINTEGER bufferLength, SQLINTEGER* outputLength) {
+void ODBCDescriptor::GetField(SQLSMALLINT recordNumber, SQLSMALLINT fieldIdentifier, SQLPOINTER value, SQLINTEGER bufferLength, SQLINTEGER* outputLength, bool isUnicode) {
   // Handle header fields before validating the record number.
   switch (fieldIdentifier) {
     case SQL_DESC_ALLOC_TYPE:
@@ -292,37 +292,37 @@ void ODBCDescriptor::GetField(SQLSMALLINT recordNumber, SQLSMALLINT fieldIdentif
   const DescriptorRecord& record = m_records[zeroBasedRecord];
   switch (fieldIdentifier) {
     case SQL_DESC_BASE_COLUMN_NAME:
-      GetAttributeUTF8(record.m_baseColumnName, value, bufferLength, outputLength, GetDiagnostics());
+      GetStringAttribute(isUnicode, record.m_baseColumnName, true, value, bufferLength, outputLength, GetDiagnostics());
       break;
     case SQL_DESC_BASE_TABLE_NAME:
-      GetAttributeUTF8(record.m_baseTableName, value, bufferLength, outputLength, GetDiagnostics());
+      GetStringAttribute(isUnicode, record.m_baseTableName, true, value, bufferLength, outputLength, GetDiagnostics());
       break;
     case SQL_DESC_CATALOG_NAME:
-      GetAttributeUTF8(record.m_catalogName, value, bufferLength, outputLength, GetDiagnostics());
+      GetStringAttribute(isUnicode, record.m_catalogName, true, value, bufferLength, outputLength, GetDiagnostics());
       break;
     case SQL_DESC_LABEL:
-      GetAttributeUTF8(record.m_label, value, bufferLength, outputLength, GetDiagnostics());
+      GetStringAttribute(isUnicode, record.m_label, true, value, bufferLength, outputLength, GetDiagnostics());
       break;
     case SQL_DESC_LITERAL_PREFIX:
-      GetAttributeUTF8(record.m_literalPrefix, value, bufferLength, outputLength, GetDiagnostics());
+      GetStringAttribute(isUnicode, record.m_literalPrefix, true, value, bufferLength, outputLength, GetDiagnostics());
       break;
     case SQL_DESC_LITERAL_SUFFIX:
-      GetAttributeUTF8(record.m_literalSuffix, value, bufferLength, outputLength, GetDiagnostics());
+      GetStringAttribute(isUnicode, record.m_literalSuffix, true, value, bufferLength, outputLength, GetDiagnostics());
       break;
     case SQL_DESC_LOCAL_TYPE_NAME:
-      GetAttributeUTF8(record.m_localTypeName, value, bufferLength, outputLength, GetDiagnostics());
+      GetStringAttribute(isUnicode, record.m_localTypeName, true, value, bufferLength, outputLength, GetDiagnostics());
       break;
     case SQL_DESC_NAME:
-      GetAttributeUTF8(record.m_name, value, bufferLength, outputLength, GetDiagnostics());
+      GetStringAttribute(isUnicode, record.m_name, true, value, bufferLength, outputLength, GetDiagnostics());
       break;
     case SQL_DESC_SCHEMA_NAME:
-      GetAttributeUTF8(record.m_schemaName, value, bufferLength, outputLength, GetDiagnostics());
+      GetStringAttribute(isUnicode, record.m_schemaName, true, value, bufferLength, outputLength, GetDiagnostics());
       break;
     case SQL_DESC_TABLE_NAME:
-      GetAttributeUTF8(record.m_tableName, value, bufferLength, outputLength, GetDiagnostics());
+      GetStringAttribute(isUnicode, record.m_tableName, true, value, bufferLength, outputLength, GetDiagnostics());
       break;
     case SQL_DESC_TYPE_NAME:
-      GetAttributeUTF8(record.m_typeName, value, bufferLength, outputLength, GetDiagnostics());
+      GetStringAttribute(isUnicode, record.m_typeName, true, value, bufferLength, outputLength, GetDiagnostics());
       break;
 
     case SQL_DESC_DATA_PTR:
