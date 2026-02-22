@@ -39,6 +39,15 @@ jobs:
             libssl-dev \
             rapidjson-dev
 
+      - name: Cache Arrow ExternalProject
+        uses: actions/cache@v4
+        with:
+          save-always: true
+          path: build/flight_sql/ApacheArrow-prefix
+          key: arrow-linux-${{ matrix.arch }}-apache-arrow-23.0.1-${{ hashFiles('flight_sql/CMakeLists.txt', 'flight_sql/patch_arrow.cmake', 'flight_sql/merge_abseil.cmake') }}
+          restore-keys: |
+            arrow-linux-${{ matrix.arch }}-apache-arrow-23.0.1-
+
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
 
@@ -69,6 +78,15 @@ jobs:
 
       - name: Install dependencies
         run: brew install cmake boost libiodbc openssl@3 rapidjson
+
+      - name: Cache Arrow ExternalProject
+        uses: actions/cache@v4
+        with:
+          save-always: true
+          path: build/flight_sql/ApacheArrow-prefix
+          key: arrow-macos-arm64-apache-arrow-23.0.1-${{ hashFiles('flight_sql/CMakeLists.txt', 'flight_sql/patch_arrow.cmake', 'flight_sql/merge_abseil.cmake') }}
+          restore-keys: |
+            arrow-macos-arm64-apache-arrow-23.0.1-
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -140,6 +158,15 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+
+      - name: Cache Arrow ExternalProject
+        uses: actions/cache@v4
+        with:
+          save-always: true
+          path: build/flight_sql/ApacheArrow-prefix
+          key: arrow-windows-x64-apache-arrow-23.0.1-${{ hashFiles('flight_sql/CMakeLists.txt', 'flight_sql/patch_arrow.cmake') }}
+          restore-keys: |
+            arrow-windows-x64-apache-arrow-23.0.1-
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -240,7 +267,7 @@ jobs:
       - name: Install ODBC runtime and driver dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y unixodbc libssl-dev
+          sudo apt-get install -y unixodbc unixodbc-dev libssl-dev
 
       - name: Download driver artifact
         uses: actions/download-artifact@v4
@@ -342,6 +369,68 @@ jobs:
           run_isql "INSERT" bash -c "echo 'INSERT INTO cross_conn_test VALUES (1, '\''hello'\'');' | isql -v -k '$CONN'"
           run_isql "SELECT" bash -c "echo 'SELECT id, val FROM cross_conn_test;' | isql -v -k '$CONN'"
           run_isql "DROP TABLE" bash -c "echo 'DROP TABLE cross_conn_test;' | isql -v -k '$CONN'"
+
+          echo "=== Test 6: SQLColAttribute numericAttr with NULL charAttr ==="
+          # Compile a small C program that calls SQLColAttribute with charAttr=NULL
+          # and verifies numericAttr is correctly populated (regression test for
+          # Power Query SQL_UNKNOWN_TYPE bug).
+          cat > /tmp/test_colattr.c << 'CEOF'
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <sql.h>
+          #include <sqlext.h>
+
+          #define CHECK(rc, msg) do { \
+            if ((rc) != SQL_SUCCESS && (rc) != SQL_SUCCESS_WITH_INFO) { \
+              fprintf(stderr, "FAIL: %s (rc=%d)\n", msg, rc); \
+              return 1; \
+            } \
+          } while(0)
+
+          int main(void) {
+            SQLHENV hEnv = SQL_NULL_HENV;
+            SQLHDBC hDbc = SQL_NULL_HDBC;
+            SQLHSTMT hStmt = SQL_NULL_HSTMT;
+
+            CHECK(SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &hEnv), "AllocEnv");
+            CHECK(SQLSetEnvAttr(hEnv, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0), "SetEnvAttr");
+            CHECK(SQLAllocHandle(SQL_HANDLE_DBC, hEnv, &hDbc), "AllocDbc");
+
+            SQLCHAR connStr[] = "Driver=/tmp/libgizmosql-odbc.so;host=localhost;port=31337;"
+                                "uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false";
+            CHECK(SQLDriverConnect(hDbc, NULL, connStr, SQL_NTS, NULL, 0, NULL, SQL_DRIVER_NOPROMPT),
+                  "DriverConnect");
+
+            CHECK(SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt), "AllocStmt");
+            CHECK(SQLExecDirect(hStmt, (SQLCHAR *)"SELECT 42 AS answer", SQL_NTS), "ExecDirect");
+
+            /* Key test: call SQLColAttribute with charAttr=NULL (as Power Query does) */
+            SQLLEN numericAttr = 0;
+            CHECK(SQLColAttribute(hStmt, 1, SQL_DESC_CONCISE_TYPE, NULL, 0, NULL, &numericAttr),
+                  "ColAttribute SQL_DESC_CONCISE_TYPE");
+
+            if (numericAttr == 0) {
+              fprintf(stderr, "FAIL: numericAttr is 0 (SQL_UNKNOWN_TYPE) — charAttr=NULL bug\n");
+              return 1;
+            }
+            printf("OK: SQL_DESC_CONCISE_TYPE = %ld (expected SQL_INTEGER=4)\n", (long)numericAttr);
+
+            /* Also verify SQL_DESC_NULLABLE */
+            SQLLEN nullable = -1;
+            CHECK(SQLColAttribute(hStmt, 1, SQL_DESC_NULLABLE, NULL, 0, NULL, &nullable),
+                  "ColAttribute SQL_DESC_NULLABLE");
+            printf("OK: SQL_DESC_NULLABLE = %ld\n", (long)nullable);
+
+            SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+            SQLDisconnect(hDbc);
+            SQLFreeHandle(SQL_HANDLE_DBC, hDbc);
+            SQLFreeHandle(SQL_HANDLE_ENV, hEnv);
+            printf("All SQLColAttribute numericAttr tests passed.\n");
+            return 0;
+          }
+          CEOF
+          gcc -o /tmp/test_colattr /tmp/test_colattr.c -lodbc
+          /tmp/test_colattr
 
           echo "=== All integration tests passed ==="
 
@@ -583,11 +672,12 @@ jobs:
           $g.DrawImage($logo, 10, 4, 200, 50)
           $g.Dispose()
           $banner.Save("${{ github.workspace }}\installer\banner.bmp", [System.Drawing.Imaging.ImageFormat]::Bmp)
-          # Create dialog (493x312)
+          # Create dialog (493x312) — logo in bottom-left to avoid
+          # overlapping WiX welcome/completion title text area.
           $dialog = New-Object System.Drawing.Bitmap(493, 312)
           $g = [System.Drawing.Graphics]::FromImage($dialog)
           $g.Clear([System.Drawing.Color]::White)
-          $g.DrawImage($logo, 20, 20, 300, 75)
+          $g.DrawImage($logo, 20, 220, 160, 40)
           $g.Dispose()
           $dialog.Save("${{ github.workspace }}\installer\dialog.bmp", [System.Drawing.Imaging.ImageFormat]::Bmp)
           $logo.Dispose()

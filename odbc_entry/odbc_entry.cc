@@ -908,13 +908,18 @@ SQLRETURN SQL_API SQLColAttribute(SQLHSTMT hStmt, SQLUSMALLINT colNum,
       hStmt, SQL_SUCCESS, [&]() {
         auto *ird = ODBCStatement::of(hStmt)->GetIRD();
         SQLINTEGER intLen = 0;
-        ird->GetField(colNum, fieldId, charAttr, bufferLength, &intLen);
+
+        // Provide a local buffer when charAttr is NULL so numeric
+        // attributes are still retrievable (Power Query passes NULL).
+        SQLLEN localNumericBuf = 0;
+        SQLPOINTER valuePtr = charAttr ? charAttr : &localNumericBuf;
+        SQLSMALLINT valueBufLen = charAttr ? bufferLength
+                                           : static_cast<SQLSMALLINT>(sizeof(localNumericBuf));
+
+        ird->GetField(colNum, fieldId, valuePtr, valueBufLen, &intLen);
         if (stringLength) *stringLength = static_cast<SQLSMALLINT>(intLen);
-        // For numeric attributes, the value is returned in charAttr for
-        // string fields; for integer fields it's already written into charAttr
-        // which we also copy to numericAttr.
-        if (numericAttr && charAttr) {
-          *numericAttr = *reinterpret_cast<SQLLEN *>(charAttr);
+        if (numericAttr) {
+          *numericAttr = *reinterpret_cast<SQLLEN *>(valuePtr);
         }
         return SQL_SUCCESS;
       });
@@ -929,10 +934,18 @@ SQLRETURN SQL_API SQLColAttributeW(SQLHSTMT hStmt, SQLUSMALLINT colNum,
       hStmt, SQL_SUCCESS, [&]() {
         auto *ird = ODBCStatement::of(hStmt)->GetIRD();
         SQLINTEGER intLen = 0;
-        ird->GetField(colNum, fieldId, charAttr, bufferLength, &intLen, true);
+
+        // Provide a local buffer when charAttr is NULL so numeric
+        // attributes are still retrievable (Power Query passes NULL).
+        SQLLEN localNumericBuf = 0;
+        SQLPOINTER valuePtr = charAttr ? charAttr : &localNumericBuf;
+        SQLSMALLINT valueBufLen = charAttr ? bufferLength
+                                           : static_cast<SQLSMALLINT>(sizeof(localNumericBuf));
+
+        ird->GetField(colNum, fieldId, valuePtr, valueBufLen, &intLen, true);
         if (stringLength) *stringLength = static_cast<SQLSMALLINT>(intLen);
-        if (numericAttr && charAttr) {
-          *numericAttr = *reinterpret_cast<SQLLEN *>(charAttr);
+        if (numericAttr) {
+          *numericAttr = *reinterpret_cast<SQLLEN *>(valuePtr);
         }
         return SQL_SUCCESS;
       });
@@ -1656,10 +1669,82 @@ SQLRETURN SQL_API SQLGetDiagFieldW(SQLSMALLINT handleType, SQLHANDLE handle,
                                   SQLPOINTER diagInfo,
                                   SQLSMALLINT bufferLength,
                                   SQLSMALLINT *stringLength) {
-  // For most fields, delegate to ANSI version.
-  // The Driver Manager usually handles W→A conversion for diagnostics.
-  return SQLGetDiagField(handleType, handle, recNumber, diagIdentifier,
-                         diagInfo, bufferLength, stringLength);
+  if (!handle) return SQL_INVALID_HANDLE;
+
+  // Numeric / header fields — pass through as-is (no string conversion).
+  switch (diagIdentifier) {
+  case SQL_DIAG_NUMBER:
+  case SQL_DIAG_NATIVE:
+  case SQL_DIAG_RETURNCODE:
+    return SQLGetDiagField(handleType, handle, recNumber, diagIdentifier,
+                           diagInfo, bufferLength, stringLength);
+  default:
+    break;
+  }
+
+  Diagnostics *diag = nullptr;
+  switch (handleType) {
+  case SQL_HANDLE_ENV:
+    diag = &ODBCEnvironment::of(handle)->GetDiagnostics();
+    break;
+  case SQL_HANDLE_DBC:
+    diag = &ODBCConnection::of(handle)->GetDiagnostics();
+    break;
+  case SQL_HANDLE_STMT:
+    diag = &ODBCStatement::of(handle)->GetDiagnostics();
+    break;
+  case SQL_HANDLE_DESC:
+    diag = &ODBCDescriptor::of(handle)->GetDiagnostics();
+    break;
+  default:
+    return SQL_ERROR;
+  }
+
+  uint32_t idx = static_cast<uint32_t>(recNumber - 1);
+  if (!diag->HasRecord(idx)) return SQL_NO_DATA;
+
+  // String fields — convert UTF-8 to UTF-16 (SQLWCHAR).
+  std::string value;
+  switch (diagIdentifier) {
+  case SQL_DIAG_SQLSTATE:
+    value = diag->GetSQLState(idx);
+    break;
+  case SQL_DIAG_MESSAGE_TEXT:
+    value = diag->GetMessageText(idx);
+    break;
+  case SQL_DIAG_CLASS_ORIGIN:
+  case SQL_DIAG_SUBCLASS_ORIGIN: {
+    value = "ISO 9075";
+    std::string state = diag->GetSQLState(idx);
+    if (state.size() >= 2 && state[0] == 'I' && state[1] == 'M') {
+      value = "ODBC 3.0";
+    }
+    break;
+  }
+  case SQL_DIAG_SERVER_NAME:
+  case SQL_DIAG_CONNECTION_NAME:
+    value = "";
+    break;
+  default:
+    return SQL_ERROR;
+  }
+
+  if (diagInfo && bufferLength > 0) {
+    SQLSMALLINT bytesWritten = 0;
+    Utf8ToSqlWChar(value, reinterpret_cast<SQLWCHAR *>(diagInfo),
+                   static_cast<SQLSMALLINT>(bufferLength),
+                   &bytesWritten);
+    if (stringLength) *stringLength = bytesWritten;
+    // Check for truncation.
+    size_t neededBytes = value.size() * GetSqlWCharSize() + GetSqlWCharSize();
+    if (static_cast<size_t>(bufferLength) < neededBytes) {
+      return SQL_SUCCESS_WITH_INFO;
+    }
+  } else if (stringLength) {
+    *stringLength = static_cast<SQLSMALLINT>(value.size() * GetSqlWCharSize());
+  }
+
+  return SQL_SUCCESS;
 }
 
 // ODBC 2.x SQLError
