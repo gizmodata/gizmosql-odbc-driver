@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- Fix `ODBCStatement` constructor initializing `m_currentArd` to the APD (`m_builtInApd`) instead of the ARD (`m_builtInArd`), causing all `SQLFetch`/`SQLFetchScroll` row-binding operations to read from the wrong descriptor
+- Fix `getCTypeForSQLType` using `SQL_C_INTERVAL_*` case labels (C-type constants, negative values) instead of `SQL_INTERVAL_*` SQL-type constants (100-range), causing interval-typed columns to always throw "Unknown SQL type" when `SQLGetData` was called with `SQL_C_DEFAULT`
+- Fix `SQL_ATTR_MAX_ROWS` statement attribute rejecting writes with "read-only attribute"; it is a valid, settable ODBC attribute that limits rows returned by `SQLFetch`
+- Fix DDL/DML statements never executing when the server returns a `FlightInfo` with empty endpoints; `Execute()` and `ExecutePrepared()` now detect empty endpoints and fall back to `ExecuteUpdate()` so the statement actually runs on the server
+
 ## [v1.0.0] - 2026-02-22
 
 Initial release.

@@ -133,6 +133,18 @@ bool FlightSqlStatement::ExecutePrepared() {
 
   flight_info_ = result.ValueOrDie();
 
+  // For DDL/DML the server may return empty endpoints. In that case
+  // GetFlightInfo only planned the query; fall back to ExecuteUpdate so it
+  // actually runs and we get the affected-row count.
+  if (flight_info_->endpoints().empty()) {
+    Result<int64_t> update_result = prepared_statement_->ExecuteUpdate(call_options_);
+    ThrowIfNotOK(update_result.status());
+    update_count_ = update_result.ValueOrDie();
+    current_result_set_ = std::make_shared<FlightSqlResultSet>(
+        sql_client_, call_options_, flight_info_, nullptr, diagnostics_, metadata_settings_);
+    return true;
+  }
+
   update_count_ = flight_info_->total_records();
   current_result_set_ = std::make_shared<FlightSqlResultSet>(
       sql_client_, call_options_, flight_info_, nullptr, diagnostics_, metadata_settings_);
@@ -148,6 +160,18 @@ bool FlightSqlStatement::Execute(const std::string &query) {
   ThrowIfNotOK(result.status());
 
   flight_info_ = result.ValueOrDie();
+
+  // For DDL/DML the server may return empty endpoints. In that case
+  // GetFlightInfo only planned the query; fall back to ExecuteUpdate so it
+  // actually runs and we get the affected-row count.
+  if (flight_info_->endpoints().empty()) {
+    Result<int64_t> update_result = sql_client_.ExecuteUpdate(call_options_, query);
+    ThrowIfNotOK(update_result.status());
+    update_count_ = update_result.ValueOrDie();
+    current_result_set_ = std::make_shared<FlightSqlResultSet>(
+        sql_client_, call_options_, flight_info_, nullptr, diagnostics_, metadata_settings_);
+    return true;
+  }
 
   update_count_ = flight_info_->total_records();
   current_result_set_ = std::make_shared<FlightSqlResultSet>(
