@@ -198,7 +198,7 @@ ODBCStatement::ODBCStatement(ODBCConnection& connection,
   m_builtInApd(std::make_shared<ODBCDescriptor>(m_spiStatement->GetDiagnostics(), nullptr, this, true, true, connection.IsOdbc2Connection())),
   m_ipd(std::make_shared<ODBCDescriptor>(m_spiStatement->GetDiagnostics(), nullptr, this, false, true, connection.IsOdbc2Connection())),
   m_ird(std::make_shared<ODBCDescriptor>(m_spiStatement->GetDiagnostics(), nullptr, this, false, false, connection.IsOdbc2Connection())),
-  m_currentArd(m_builtInApd.get()),
+  m_currentArd(m_builtInArd.get()),
   m_currentApd(m_builtInApd.get()),
   m_rowNumber(0),
   m_maxRows(0),
@@ -586,7 +586,8 @@ void ODBCStatement::SetStmtAttr(SQLINTEGER statementAttribute, SQLPOINTER value,
       return;
 
     case SQL_ATTR_MAX_ROWS:
-      throw DriverException("Cannot set read-only attribute", "HY092");
+      SetAttribute(value, m_maxRows);
+      return;
 
     // Driver-leve statement attributes. These are all size_t attributes
     case SQL_ATTR_MAX_LENGTH:

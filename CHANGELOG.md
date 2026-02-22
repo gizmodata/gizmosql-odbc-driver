@@ -22,3 +22,5 @@ Initial release.
 - Fix `SQLGetDiagFieldW` returning UTF-8 instead of UTF-16 for string diagnostic fields
 - Cache Arrow ExternalProject build artifacts in CI to avoid rebuilding from source on every run
 - Add `SQLColAttribute` numericAttr regression test to Linux integration tests
+- Fix `m_currentArd` descriptor initialized to APD instead of ARD, which could cause column bindings to use the wrong descriptor
+- Fix `SQL_ATTR_MAX_ROWS` incorrectly throwing read-only error instead of setting the max rows limit
