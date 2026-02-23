@@ -131,6 +131,10 @@ jobs:
     # x64 binary works on ARM64 Windows via emulation.
     runs-on: windows-2022
     name: Build Windows (x64)
+    env:
+      # VS 2022 sets VCPKG_ROOT to its own vcpkg copy, conflicting with the
+      # runner's vcpkg at C:\vcpkg. Override to suppress the mismatch warning.
+      VCPKG_ROOT: C:\vcpkg
     steps:
       - uses: actions/checkout@v4
 
@@ -155,20 +159,20 @@ jobs:
         id: vcpkg-cache
         uses: actions/cache/restore@v4
         with:
-          path: ${{ env.VCPKG_INSTALLATION_ROOT }}/installed
+          path: ${{ env.VCPKG_ROOT }}/installed
           key: vcpkg-x64-windows-static-md-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
             vcpkg-x64-windows-static-md-
 
       - name: Install dependencies
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install --triplet x64-windows-static-md --clean-after-build --x-install-root="$env:VCPKG_INSTALLATION_ROOT\installed"
+          & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet x64-windows-static-md --clean-after-build --x-install-root="$env:VCPKG_ROOT\installed"
 
       - name: Save vcpkg cache
         if: steps.vcpkg-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: ${{ env.VCPKG_INSTALLATION_ROOT }}/installed
+          path: ${{ env.VCPKG_ROOT }}/installed
           key: vcpkg-x64-windows-static-md-${{ hashFiles('vcpkg.json') }}
 
       - name: Setup MSVC environment
@@ -192,7 +196,7 @@ jobs:
         run: |
           cmake -B build `
             -DARROW_GIT_REPOSITORY=https://github.com/apache/arrow.git `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows-static-md `
             -DVCPKG_MANIFEST_MODE=OFF `
             -G Ninja `
