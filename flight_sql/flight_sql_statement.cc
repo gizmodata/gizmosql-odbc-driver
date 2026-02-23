@@ -6,6 +6,7 @@
  */
 
 #include "flight_sql_statement.h"
+#include <algorithm>
 #include <odbcabstraction/platform.h>
 #include "flight_sql_result_set.h"
 #include "flight_sql_result_set_metadata.h"
@@ -191,6 +192,13 @@ std::shared_ptr<odbcabstraction::ResultSet> FlightSqlStatement::GetTables(
   } else {
     if (table_type) {
       ParseTableTypes(*table_type, table_types);
+    }
+
+    // ODBC uses "TABLE" for base tables, but SQL standard / DuckDB uses
+    // "BASE TABLE".  When callers (e.g. Power Query) request "TABLE",
+    // also include "BASE TABLE" so the Flight SQL server returns results.
+    if (std::find(table_types.begin(), table_types.end(), "TABLE") != table_types.end()) {
+      table_types.emplace_back("BASE TABLE");
     }
 
     current_result_set_ = GetTablesForGenericUse(

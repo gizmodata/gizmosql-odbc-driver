@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- Fix empty Power BI navigation table: ODBC callers (Power Query) filter for table type "TABLE", but DuckDB returns "BASE TABLE" per SQL standard. The driver now maps "TABLE" → "BASE TABLE" when sending the filter to the Flight SQL server.
+
 ## [v1.0.0] - 2026-02-22
 
 Initial release.
