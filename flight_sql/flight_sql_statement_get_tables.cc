@@ -163,8 +163,12 @@ std::shared_ptr<ResultSet> GetTablesForGenericUse(
     const std::string *schema_name, const std::string *table_name,
     const std::vector<std::string> &table_types,
     odbcabstraction::Diagnostics &diagnostics, const odbcabstraction::MetadataSettings &metadata_settings) {
+  // Pass nullptr when table_types is empty (no filter specified) so the
+  // Flight SQL server returns all table types.  A non-null pointer to an
+  // empty vector means "match no types" in the Flight SQL protocol.
   Result<std::shared_ptr<FlightInfo>> result = sql_client.GetTables(
-      call_options, catalog_name, schema_name, table_name, false, &table_types);
+      call_options, catalog_name, schema_name, table_name, false,
+      table_types.empty() ? nullptr : &table_types);
 
   std::shared_ptr<Schema> schema;
   std::shared_ptr<FlightInfo> flight_info;
