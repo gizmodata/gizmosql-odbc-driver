@@ -145,7 +145,7 @@ jobs:
         uses: actions/cache@v4
         with:
           save-always: true
-          path: ${{ env.VCPKG_INSTALLATION_ROOT }}/installed
+          path: ${{ env.VCPKG_ROOT }}/installed
           key: vcpkg-x64-windows-static-md-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
             vcpkg-x64-windows-static-md-
