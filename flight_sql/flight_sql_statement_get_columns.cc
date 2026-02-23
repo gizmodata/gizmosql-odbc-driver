@@ -117,10 +117,14 @@ Transform_inner(const odbcabstraction::OdbcVersion odbc_version,
                            : ConvertSqlDataTypeFromV3ToV2(data_type_v3);
 
       // TODO: Use `metadata.GetTypeName()` when ARROW-16064 is merged.
-      const auto &type_name_result = field->metadata()->Get("ARROW:FLIGHT:SQL:TYPE_NAME");
-      data.type_name = type_name_result.ok() ?
-              type_name_result.ValueOrDie() :
-              GetTypeNameFromSqlDataType(data_type_v3);
+      if (field->metadata()) {
+        const auto &type_name_result = field->metadata()->Get("ARROW:FLIGHT:SQL:TYPE_NAME");
+        data.type_name = type_name_result.ok() ?
+                type_name_result.ValueOrDie() :
+                GetTypeNameFromSqlDataType(data_type_v3);
+      } else {
+        data.type_name = GetTypeNameFromSqlDataType(data_type_v3);
+      }
 
       const Result<int32_t> &precision_result = metadata.GetPrecision();
       data.column_size = precision_result.ok()

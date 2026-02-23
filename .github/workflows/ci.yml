@@ -434,6 +434,12 @@ jobs:
 
           echo "=== All integration tests passed ==="
 
+      - name: Run metadata integration tests (SQLTables/SQLColumns)
+        run: |
+          echo "=== Test 7: Metadata listing (SQLTables/SQLColumns) ==="
+          gcc -o /tmp/test_metadata integration_tests/test_metadata.c -lodbc
+          /tmp/test_metadata
+
   integration-test-linux-tls:
     needs: build-linux
     name: Integration Tests TLS (Linux x64)

@@ -24,3 +24,5 @@ Initial release.
 - Add `SQLColAttribute` numericAttr regression test to Linux integration tests
 - Fix `m_currentArd` descriptor initialized to APD instead of ARD, which could cause column bindings to use the wrong descriptor
 - Fix `SQL_ATTR_MAX_ROWS` incorrectly throwing read-only error instead of setting the max rows limit
+- Fix `SQLColumns` crash (null pointer dereference) when server returns column schema fields without `ARROW:FLIGHT:SQL:TYPE_NAME` metadata
+- Add metadata integration tests (SQLTables/SQLColumns) to CI exercising all four Flight SQL metadata endpoints (GetCatalogs, GetDbSchemas, GetTableTypes, GetTables)
