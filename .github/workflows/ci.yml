@@ -137,15 +137,11 @@ jobs:
           }
           Get-PSDrive C | Select-Object Name, @{N='Free(GB)';E={[math]::Round($_.Free/1GB,1)}}
 
-      - name: Set up vcpkg
-        run: |
-          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
-
       - name: Cache vcpkg installed packages
         uses: actions/cache@v4
         with:
           save-always: true
-          path: ${{ env.VCPKG_ROOT }}/installed
+          path: ${{ env.VCPKG_INSTALLATION_ROOT }}/installed
           key: vcpkg-x64-windows-static-md-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
             vcpkg-x64-windows-static-md-
