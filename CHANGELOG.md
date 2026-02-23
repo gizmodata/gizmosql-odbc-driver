@@ -26,3 +26,4 @@ Initial release.
 - Fix `SQL_ATTR_MAX_ROWS` incorrectly throwing read-only error instead of setting the max rows limit
 - Fix `SQLColumns` crash (null pointer dereference) when server returns column schema fields without `ARROW:FLIGHT:SQL:TYPE_NAME` metadata
 - Add metadata integration tests (SQLTables/SQLColumns) to CI exercising all four Flight SQL metadata endpoints (GetCatalogs, GetDbSchemas, GetTableTypes, GetTables)
+- Fix Windows CI vcpkg cache never saving/restoring: `${{ env.VCPKG_INSTALLATION_ROOT }}` resolved to empty string (system env var not in GitHub Actions env context); changed to `${{ env.VCPKG_ROOT }}` which is explicitly exported via `$GITHUB_ENV`
