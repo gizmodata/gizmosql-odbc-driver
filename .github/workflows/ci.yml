@@ -180,6 +180,12 @@ jobs:
         with:
           arch: x64
 
+      # vcvarsall.bat (run by ilammy/msvc-dev-cmd) exports VCPKG_ROOT pointing
+      # to VS's own vcpkg copy, overriding our job-level env. Re-set it.
+      - name: Restore VCPKG_ROOT after MSVC setup
+        shell: pwsh
+        run: echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+
       - name: Restore Arrow cache
         id: arrow-cache
         uses: actions/cache/restore@v4
