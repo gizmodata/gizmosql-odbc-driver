@@ -72,6 +72,14 @@ class ODBCStatement : public ODBCHandle<ODBCStatement> {
     inline ODBCDescriptor* GetARD() {
       return m_currentArd;
     }
+
+    inline ODBCDescriptor* GetAPD() {
+      return m_currentApd;
+    }
+
+    inline ODBCDescriptor* GetIPD() {
+      return m_ipd.get();
+    }
     
     inline SQLULEN GetRowsetSize() {
       return m_rowsetSize;

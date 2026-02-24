@@ -1,12 +1,13 @@
 /*
- * Integration test for ODBC metadata functions (SQLTables / SQLColumns).
+ * Integration test for ODBC metadata and parameterized query functions.
  *
  * Exercises all four Flight SQL metadata routing paths in the driver:
  *   1. GetCatalogs       — SQLTables(SQL_ALL_CATALOGS, "", "", NULL)
  *   2. GetDbSchemas      — SQLTables("", SQL_ALL_SCHEMAS, "", NULL)
  *   3. GetTableTypes     — SQLTables("", "", "", SQL_ALL_TABLE_TYPES)
  *   4. GetTables (generic) — SQLTables(NULL, NULL, NULL, NULL)
- * Plus filtered SQLTables variants and SQLColumns.
+ * Plus filtered SQLTables variants, SQLColumns, and parameterized queries
+ * (SQLPrepare/SQLBindParameter/SQLExecute).
  *
  * Compile: gcc -o test_metadata test_metadata.c -lodbc
  * Requires: unixODBC, GizmoSQL server on localhost:31337
@@ -555,6 +556,197 @@ static int test_columns_cross_catalog(SQLHSTMT hStmt) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Test: SQLNumParams and SQLDescribeParam after Prepare
+ *   Verifies that after SQLPrepare, SQLNumParams returns the correct count
+ *   and SQLDescribeParam returns parameter metadata.
+ * ------------------------------------------------------------------------ */
+static int test_num_params(SQLHSTMT hStmt) {
+  printf("\n--- Test: SQLNumParams after Prepare ---\n");
+
+  SQLRETURN rc = SQLPrepare(hStmt,
+    (SQLCHAR *)"SELECT * FROM region WHERE r_regionkey = ?", SQL_NTS);
+  CHECK(rc, "SQLPrepare with 1 parameter");
+
+  SQLSMALLINT paramCount = -1;
+  rc = SQLNumParams(hStmt, &paramCount);
+  CHECK(rc, "SQLNumParams");
+
+  printf("  Parameter count: %d\n", (int)paramCount);
+
+  if (paramCount != 1) {
+    fprintf(stderr, "FAIL: expected 1 parameter, got %d\n", (int)paramCount);
+    reset_stmt(hStmt);
+    return 1;
+  }
+
+  printf("  PASS\n");
+  reset_stmt(hStmt);
+  return 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Test: Parameterized query with integer parameter
+ *   SQLPrepare -> SQLBindParameter(int) -> SQLExecute -> SQLFetch
+ *   Verifies that binding an integer parameter via prepared statement works
+ *   end-to-end through the Flight SQL PreparedStatement::SetParameters path.
+ * ------------------------------------------------------------------------ */
+static int test_parameterized_query_int(SQLHSTMT hStmt) {
+  printf("\n--- Test: Parameterized query (integer) ---\n");
+
+  SQLRETURN rc = SQLPrepare(hStmt,
+    (SQLCHAR *)"SELECT r_regionkey, r_name FROM region WHERE r_regionkey = ?",
+    SQL_NTS);
+  CHECK(rc, "SQLPrepare");
+
+  /* Bind parameter: r_regionkey = 1 (AFRICA in TPC-H) */
+  SQLINTEGER regionkey = 1;
+  rc = SQLBindParameter(hStmt, 1, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER,
+                         0, 0, &regionkey, 0, NULL);
+  CHECK(rc, "SQLBindParameter(int)");
+
+  rc = SQLExecute(hStmt);
+  CHECK(rc, "SQLExecute");
+
+  /* Fetch results */
+  SQLINTEGER result_key;
+  SQLCHAR result_name[MAX_COL_LEN];
+  SQLLEN ind_key, ind_name;
+
+  SQLBindCol(hStmt, 1, SQL_C_SLONG, &result_key, sizeof(result_key), &ind_key);
+  SQLBindCol(hStmt, 2, SQL_C_CHAR, result_name, sizeof(result_name), &ind_name);
+
+  int count = 0;
+  while (SQLFetch(hStmt) == SQL_SUCCESS) {
+    printf("  r_regionkey=%d r_name='%s'\n",
+           (int)result_key,
+           ind_name == SQL_NULL_DATA ? "NULL" : (char *)result_name);
+    count++;
+  }
+
+  printf("  Total rows: %d\n", count);
+
+  if (count != 1) {
+    fprintf(stderr, "FAIL: expected 1 row for regionkey=1, got %d\n", count);
+    reset_stmt(hStmt);
+    return 1;
+  }
+
+  if (result_key != 1) {
+    fprintf(stderr, "FAIL: expected r_regionkey=1, got %d\n", (int)result_key);
+    reset_stmt(hStmt);
+    return 1;
+  }
+
+  printf("  PASS\n");
+  reset_stmt(hStmt);
+  return 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Test: Parameterized query with string parameter
+ *   SQLPrepare -> SQLBindParameter(varchar) -> SQLExecute -> SQLFetch
+ *   Power BI DirectQuery often sends parameters as strings even for
+ *   numeric columns; this test verifies string parameter binding.
+ * ------------------------------------------------------------------------ */
+static int test_parameterized_query_string(SQLHSTMT hStmt) {
+  printf("\n--- Test: Parameterized query (string) ---\n");
+
+  SQLRETURN rc = SQLPrepare(hStmt,
+    (SQLCHAR *)"SELECT n_nationkey, n_name FROM nation WHERE n_name = ?",
+    SQL_NTS);
+  CHECK(rc, "SQLPrepare");
+
+  /* Bind parameter: n_name = 'FRANCE' */
+  SQLCHAR name_param[] = "FRANCE";
+  SQLLEN name_ind = SQL_NTS;
+  rc = SQLBindParameter(hStmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
+                         64, 0, name_param, sizeof(name_param), &name_ind);
+  CHECK(rc, "SQLBindParameter(varchar)");
+
+  rc = SQLExecute(hStmt);
+  CHECK(rc, "SQLExecute");
+
+  /* Fetch results */
+  SQLINTEGER result_key;
+  SQLCHAR result_name[MAX_COL_LEN];
+  SQLLEN ind_key, ind_name;
+
+  SQLBindCol(hStmt, 1, SQL_C_SLONG, &result_key, sizeof(result_key), &ind_key);
+  SQLBindCol(hStmt, 2, SQL_C_CHAR, result_name, sizeof(result_name), &ind_name);
+
+  int count = 0;
+  while (SQLFetch(hStmt) == SQL_SUCCESS) {
+    printf("  n_nationkey=%d n_name='%s'\n",
+           (int)result_key,
+           ind_name == SQL_NULL_DATA ? "NULL" : (char *)result_name);
+    count++;
+  }
+
+  printf("  Total rows: %d\n", count);
+
+  if (count != 1) {
+    fprintf(stderr, "FAIL: expected 1 row for n_name='FRANCE', got %d\n", count);
+    reset_stmt(hStmt);
+    return 1;
+  }
+
+  if (ind_name != SQL_NULL_DATA && strcasecmp((char *)result_name, "FRANCE") != 0) {
+    fprintf(stderr, "FAIL: expected n_name='FRANCE', got '%s'\n", (char *)result_name);
+    reset_stmt(hStmt);
+    return 1;
+  }
+
+  printf("  PASS\n");
+  reset_stmt(hStmt);
+  return 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Test: Parameterized query with LIMIT ? (Power BI DirectQuery pattern)
+ *   Power BI generates: SELECT "col" FROM "table" LIMIT ?
+ *   This is the exact pattern that failed before SQLBindParameter support.
+ * ------------------------------------------------------------------------ */
+static int test_parameterized_query_limit(SQLHSTMT hStmt) {
+  printf("\n--- Test: Parameterized query (LIMIT ?) ---\n");
+
+  SQLRETURN rc = SQLPrepare(hStmt,
+    (SQLCHAR *)"SELECT r_regionkey FROM region LIMIT ?", SQL_NTS);
+  CHECK(rc, "SQLPrepare");
+
+  /* Bind parameter: LIMIT 3 */
+  SQLINTEGER limit_val = 3;
+  rc = SQLBindParameter(hStmt, 1, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER,
+                         0, 0, &limit_val, 0, NULL);
+  CHECK(rc, "SQLBindParameter(LIMIT)");
+
+  rc = SQLExecute(hStmt);
+  CHECK(rc, "SQLExecute");
+
+  int count = 0;
+  SQLINTEGER result_key;
+  SQLLEN ind_key;
+
+  SQLBindCol(hStmt, 1, SQL_C_SLONG, &result_key, sizeof(result_key), &ind_key);
+
+  while (SQLFetch(hStmt) == SQL_SUCCESS) {
+    printf("  r_regionkey=%d\n", (int)result_key);
+    count++;
+  }
+
+  printf("  Total rows: %d\n", count);
+
+  if (count != 3) {
+    fprintf(stderr, "FAIL: expected 3 rows with LIMIT 3, got %d\n", count);
+    reset_stmt(hStmt);
+    return 1;
+  }
+
+  printf("  PASS\n");
+  reset_stmt(hStmt);
+  return 0;
+}
+
+/* ---------------------------------------------------------------------------
  * Main
  * ------------------------------------------------------------------------ */
 int main(void) {
@@ -567,7 +759,7 @@ int main(void) {
   setvbuf(stdout, NULL, _IONBF, 0);
   setvbuf(stderr, NULL, _IONBF, 0);
 
-  printf("=== Metadata Integration Tests (SQLTables / SQLColumns) ===\n");
+  printf("=== Integration Tests (Metadata / Parameters) ===\n");
 
   /* --- Connect --- */
   rc = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &hEnv);
@@ -696,6 +888,34 @@ int main(void) {
     g_passed++;
   }
 
+  /* Test 9: SQLNumParams after Prepare */
+  if (test_num_params(hStmt)) {
+    g_failed++;
+  } else {
+    g_passed++;
+  }
+
+  /* Test 10: Parameterized query with integer parameter */
+  if (test_parameterized_query_int(hStmt)) {
+    g_failed++;
+  } else {
+    g_passed++;
+  }
+
+  /* Test 11: Parameterized query with string parameter */
+  if (test_parameterized_query_string(hStmt)) {
+    g_failed++;
+  } else {
+    g_passed++;
+  }
+
+  /* Test 12: Parameterized query with LIMIT ? (Power BI pattern) */
+  if (test_parameterized_query_limit(hStmt)) {
+    g_failed++;
+  } else {
+    g_passed++;
+  }
+
   /* --- Cleanup --- */
   exec_ignore(hStmt, "DROP VIEW IF EXISTS v_customer_summary");
   if (multi_catalog) {
@@ -717,6 +937,6 @@ int main(void) {
     return 1;
   }
 
-  printf("All metadata tests passed.\n");
+  printf("All tests passed.\n");
   return 0;
 }

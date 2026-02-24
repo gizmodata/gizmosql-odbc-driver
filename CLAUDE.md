@@ -57,6 +57,13 @@ When unixODBC DM loads the driver, internal calls between exported ODBC function
 ### SQLGetData Return Values
 `ResultSet::GetData()` returns `true` when data was fetched (maps to `SQL_SUCCESS`), `false` only when no more data is available (maps to `SQL_NO_DATA`). The ODBC handle wrapper automatically upgrades `SQL_SUCCESS` to `SQL_SUCCESS_WITH_INFO` when diagnostics contain truncation warnings.
 
+## Testing Policy
+- **Always add tests for new functionality** — unit tests for new features and logic, integration tests for end-to-end ODBC behavior
+- **Always add regression tests for bugs** — write a unit or integration test that reproduces the bug before fixing it, ensuring it never regresses
+- Unit tests go in `flight_sql/` alongside the source (e.g., `*_test.cc`) using Google Test
+- Integration tests go in `integration_tests/test_metadata.c` using the ODBC C API against a real GizmoSQL server
+- Run `ctest --test-dir build --output-on-failure` after every change
+
 ## Changelog
 - **Always update `CHANGELOG.md`** when making major changes, new features, bug fixes, or breaking changes
 - Follow [Keep a Changelog](https://keepachangelog.com/) format

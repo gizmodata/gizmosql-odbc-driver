@@ -160,8 +160,9 @@ static void FillFunctionBitmap(SQLUSMALLINT *bitmap) {
   SetFunction(bitmap, SQL_API_SQLGETDIAGREC);
   SetFunction(bitmap, SQL_API_SQLGETDIAGFIELD);
 
-  // Parameters (stub but declared)
+  // Parameters
   SetFunction(bitmap, SQL_API_SQLBINDPARAMETER);
+  SetFunction(bitmap, SQL_API_SQLDESCRIBEPARAM);
   SetFunction(bitmap, SQL_API_SQLNUMPARAMS);
 
   // Cursor
@@ -1797,7 +1798,7 @@ SQLRETURN SQL_API SQLErrorW(SQLHENV hEnv, SQLHDBC hDbc, SQLHSTMT hStmt,
 }
 
 // ============================================================================
-// Parameter Stubs (not supported)
+// Parameter Binding
 // ============================================================================
 
 SQLRETURN SQL_API SQLBindParameter(SQLHSTMT hStmt, SQLUSMALLINT paramNum,
@@ -1807,8 +1808,43 @@ SQLRETURN SQL_API SQLBindParameter(SQLHSTMT hStmt, SQLUSMALLINT paramNum,
                                   SQLLEN bufferLength,
                                   SQLLEN *strLenOrInd) {
   return ODBCStatement::ExecuteWithDiagnostics(
-      hStmt, SQL_ERROR, [&]() -> SQLRETURN {
-        throw DriverException("SQLBindParameter not supported", "HYC00");
+      hStmt, SQL_SUCCESS, [&]() {
+        ODBCStatement* stmt = reinterpret_cast<ODBCStatement*>(hStmt);
+        ODBCDescriptor* apd = stmt->GetAPD();
+        ODBCDescriptor* ipd = stmt->GetIPD();
+
+        // Ensure APD has enough records
+        auto& apdRecords = apd->GetRecords();
+        if (apdRecords.size() < paramNum) {
+          apdRecords.resize(paramNum);
+        }
+
+        // Set APD record fields (C type, data pointer, indicator, buffer length)
+        apd->SetField(paramNum, SQL_DESC_CONCISE_TYPE,
+                       reinterpret_cast<SQLPOINTER>(static_cast<SQLLEN>(valueType)), 0);
+        apd->SetField(paramNum, SQL_DESC_OCTET_LENGTH,
+                       reinterpret_cast<SQLPOINTER>(static_cast<SQLLEN>(bufferLength)), 0);
+        apd->SetField(paramNum, SQL_DESC_INDICATOR_PTR,
+                       reinterpret_cast<SQLPOINTER>(strLenOrInd), 0);
+        apd->SetField(paramNum, SQL_DESC_DATA_PTR, paramValue, 0);
+
+        // Ensure IPD has enough records
+        auto& ipdRecords = ipd->GetRecords();
+        if (ipdRecords.size() < paramNum) {
+          ipdRecords.resize(paramNum);
+        }
+
+        // Set IPD record fields (SQL type, column size, scale, parameter type)
+        ipd->SetField(paramNum, SQL_DESC_CONCISE_TYPE,
+                       reinterpret_cast<SQLPOINTER>(static_cast<SQLLEN>(paramType)), 0);
+        ipd->SetField(paramNum, SQL_DESC_LENGTH,
+                       reinterpret_cast<SQLPOINTER>(static_cast<SQLLEN>(colSize)), 0);
+        ipd->SetField(paramNum, SQL_DESC_SCALE,
+                       reinterpret_cast<SQLPOINTER>(static_cast<SQLLEN>(decDigits)), 0);
+        ipd->SetField(paramNum, SQL_DESC_PARAMETER_TYPE,
+                       reinterpret_cast<SQLPOINTER>(static_cast<SQLLEN>(ioType)), 0);
+
+        return SQL_SUCCESS;
       });
 }
 
@@ -1817,8 +1853,22 @@ SQLRETURN SQL_API SQLDescribeParam(SQLHSTMT hStmt, SQLUSMALLINT paramNum,
                                   SQLSMALLINT *decDigits,
                                   SQLSMALLINT *nullable) {
   return ODBCStatement::ExecuteWithDiagnostics(
-      hStmt, SQL_ERROR, [&]() -> SQLRETURN {
-        throw DriverException("SQLDescribeParam not supported", "HYC00");
+      hStmt, SQL_SUCCESS, [&]() {
+        ODBCStatement* stmt = reinterpret_cast<ODBCStatement*>(hStmt);
+        ODBCDescriptor* ipd = stmt->GetIPD();
+        const auto& records = ipd->GetRecords();
+
+        if (paramNum == 0 || paramNum > records.size()) {
+          throw DriverException("Invalid descriptor index", "07009");
+        }
+
+        const auto& record = records[paramNum - 1];
+        if (dataType) *dataType = record.m_conciseType;
+        if (paramSize) *paramSize = record.m_length;
+        if (decDigits) *decDigits = record.m_scale;
+        if (nullable) *nullable = record.m_nullable;
+
+        return SQL_SUCCESS;
       });
 }
 
@@ -1840,7 +1890,11 @@ SQLRETURN SQL_API SQLPutData(SQLHSTMT hStmt, SQLPOINTER data,
 SQLRETURN SQL_API SQLNumParams(SQLHSTMT hStmt, SQLSMALLINT *paramCount) {
   return ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
-        if (paramCount) *paramCount = 0;
+        ODBCStatement* stmt = reinterpret_cast<ODBCStatement*>(hStmt);
+        ODBCDescriptor* ipd = stmt->GetIPD();
+        if (paramCount) {
+          *paramCount = static_cast<SQLSMALLINT>(ipd->GetRecords().size());
+        }
         return SQL_SUCCESS;
       });
 }

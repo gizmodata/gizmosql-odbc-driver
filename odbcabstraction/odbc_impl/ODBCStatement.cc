@@ -249,12 +249,51 @@ void ODBCStatement::Prepare(const std::string& query) {
   if (metadata) {
     m_ird->PopulateFromResultSetMetadata(metadata->get());
   }
+
+  // Populate IPD from parameter schema if available
+  auto paramSchema = m_spiStatement->GetParameterSchema();
+  if (paramSchema) {
+    m_ipd->PopulateFromResultSetMetadata(paramSchema.get());
+  }
+
   m_isPrepared = true;
 }
 
 void ODBCStatement::ExecutePrepared() {
   if (!m_isPrepared) {
     throw DriverException("Function sequence error", "HY010");
+  }
+
+  // Build and send parameter bindings if any parameters are bound
+  const auto& apdRecords = m_currentApd->GetRecords();
+  const auto& ipdRecords = m_ipd->GetRecords();
+  if (!apdRecords.empty() && !ipdRecords.empty()) {
+    size_t paramCount = std::min(apdRecords.size(), ipdRecords.size());
+    std::vector<ParameterBinding> bindings;
+    bindings.reserve(paramCount);
+
+    for (size_t i = 0; i < paramCount; ++i) {
+      const auto& apdRec = apdRecords[i];
+      const auto& ipdRec = ipdRecords[i];
+
+      if (!apdRec.m_isBound) {
+        break;
+      }
+
+      ParameterBinding binding;
+      binding.data_ptr = apdRec.m_dataPtr;
+      binding.indicator_ptr = apdRec.m_indicatorPtr;
+      binding.c_type = apdRec.m_conciseType;
+      binding.sql_type = ipdRec.m_conciseType;
+      binding.column_size = ipdRec.m_length;
+      binding.decimal_digits = ipdRec.m_scale;
+      binding.buffer_length = apdRec.m_octetLength;
+      bindings.push_back(binding);
+    }
+
+    if (!bindings.empty()) {
+      m_spiStatement->SetParameters(bindings);
+    }
   }
 
   if (m_spiStatement->ExecutePrepared()) {

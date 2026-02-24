@@ -370,6 +370,7 @@ set(GIZMOSQL_ODBC_SPI_TEST_SOURCES
   json_converter_test.cc
   record_batch_transformer_test.cc
   utils_test.cc
+  flight_sql_statement_parameters_test.cc
 )
 
 add_executable(gizmosql_odbc_spi_impl_test ${GIZMOSQL_ODBC_SPI_TEST_SOURCES})

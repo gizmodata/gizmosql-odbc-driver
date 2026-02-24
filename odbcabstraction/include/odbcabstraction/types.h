@@ -164,6 +164,16 @@ enum RowStatus: uint16_t {
   RowStatus_NOROW = 3 // Same as SQL_ROW_NOROW
 };
 
+struct ParameterBinding {
+  void* data_ptr;
+  ssize_t* indicator_ptr;
+  int16_t c_type;           // SQL_C_CHAR, SQL_C_SLONG, etc.
+  int16_t sql_type;         // SQL_VARCHAR, SQL_INTEGER, etc.
+  size_t column_size;
+  int16_t decimal_digits;
+  ssize_t buffer_length;
+};
+
 struct MetadataSettings {
   boost::optional<int32_t> string_column_length_{boost::none};
   size_t chunk_buffer_capacity_;

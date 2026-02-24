@@ -11,6 +11,7 @@
 #include <boost/variant.hpp>
 #include <map>
 #include <vector>
+#include <odbcabstraction/types.h>
 
 namespace driver {
 namespace odbcabstraction {
@@ -191,6 +192,14 @@ public:
   GetForeignKeys(const std::string *pk_catalog_name, const std::string *pk_schema_name,
                  const std::string *pk_table_name, const std::string *fk_catalog_name,
                  const std::string *fk_schema_name, const std::string *fk_table_name) = 0;
+
+  /// \brief Returns metadata about the parameters of a prepared statement.
+  /// Returns nullptr if no parameter schema is available.
+  virtual std::shared_ptr<ResultSetMetadata> GetParameterSchema() { return nullptr; }
+
+  /// \brief Sets parameter values for a prepared statement execution.
+  /// \param params The parameter bindings from the APD/IPD descriptors.
+  virtual void SetParameters(const std::vector<ParameterBinding>& params) {}
 
   /// \brief Gets the diagnostics for this statement.
   /// \return the diagnostics

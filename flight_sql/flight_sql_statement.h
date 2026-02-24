@@ -90,6 +90,10 @@ public:
                  const std::string *pk_table_name, const std::string *fk_catalog_name,
                  const std::string *fk_schema_name, const std::string *fk_table_name) override;
 
+  std::shared_ptr<odbcabstraction::ResultSetMetadata> GetParameterSchema() override;
+
+  void SetParameters(const std::vector<odbcabstraction::ParameterBinding>& params) override;
+
   odbcabstraction::Diagnostics &GetDiagnostics() override;
 
   void Cancel() override;
