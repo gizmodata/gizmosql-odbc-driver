@@ -20,6 +20,8 @@
 #include <arrow/type.h>
 #include <cstring>
 #include <ctime>
+
+#include <odbcabstraction/platform.h>
 #include <sql.h>
 #include <sqlext.h>
 
