@@ -230,12 +230,12 @@ static int test_enumerate_table_types(SQLHSTMT hStmt) {
 
   SQLBindCol(hStmt, 4, SQL_C_CHAR, type, sizeof(type), &ind_typ);
 
-  int has_base_table = 0, has_view = 0;
+  int has_table = 0, has_view = 0;
   while (SQLFetch(hStmt) == SQL_SUCCESS) {
     printf("  type='%s'\n", ind_typ == SQL_NULL_DATA ? "NULL" : (char *)type);
     count++;
     if (ind_typ != SQL_NULL_DATA) {
-      if (strcasecmp((char *)type, "BASE TABLE") == 0) has_base_table = 1;
+      if (strcasecmp((char *)type, "TABLE") == 0) has_table = 1;
       if (strcasecmp((char *)type, "VIEW") == 0) has_view = 1;
     }
   }
@@ -247,8 +247,8 @@ static int test_enumerate_table_types(SQLHSTMT hStmt) {
     reset_stmt(hStmt);
     return 1;
   }
-  if (!has_base_table) {
-    fprintf(stderr, "FAIL: 'BASE TABLE' type not found\n");
+  if (!has_table) {
+    fprintf(stderr, "FAIL: 'TABLE' type not found\n");
     reset_stmt(hStmt);
     return 1;
   }
