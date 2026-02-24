@@ -26,6 +26,13 @@
 #include "odbcabstraction/types.h"
 #include "odbcabstraction/encoding.h"
 
+// timegm is POSIX; Windows provides _mkgmtime instead
+#ifdef _WIN32
+#define portable_timegm _mkgmtime
+#else
+#define portable_timegm timegm
+#endif
+
 namespace driver {
 namespace flight_sql {
 
@@ -159,7 +166,7 @@ static std::shared_ptr<arrow::Array> BuildArrayFromBinding(
         t.tm_year = ds->year - 1900;
         t.tm_mon = ds->month - 1;
         t.tm_mday = ds->day;
-        time_t epoch = timegm(&t);
+        time_t epoch = portable_timegm(&t);
         int32_t days = static_cast<int32_t>(epoch / 86400);
         EXPECT_TRUE(builder.Append(days).ok());
       }
@@ -181,7 +188,7 @@ static std::shared_ptr<arrow::Array> BuildArrayFromBinding(
         t.tm_hour = ts->hour;
         t.tm_min = ts->minute;
         t.tm_sec = ts->second;
-        time_t epoch = timegm(&t);
+        time_t epoch = portable_timegm(&t);
         int64_t micros = static_cast<int64_t>(epoch) * 1000000LL +
                          static_cast<int64_t>(ts->fraction) / 1000LL;
         EXPECT_TRUE(builder.Append(micros).ok());
@@ -432,7 +439,7 @@ TEST(ParameterBinding, Date32_from_DATE_STRUCT) {
   t.tm_year = 2024 - 1900;
   t.tm_mon = 6 - 1;
   t.tm_mday = 15;
-  time_t epoch = timegm(&t);
+  time_t epoch = portable_timegm(&t);
   int32_t expected_days = static_cast<int32_t>(epoch / 86400);
   EXPECT_EQ(days, expected_days);
 }
@@ -473,7 +480,7 @@ TEST(ParameterBinding, Timestamp_from_TIMESTAMP_STRUCT) {
   t.tm_hour = 10;
   t.tm_min = 30;
   t.tm_sec = 45;
-  time_t epoch = timegm(&t);
+  time_t epoch = portable_timegm(&t);
   int64_t expected_micros = static_cast<int64_t>(epoch) * 1000000LL + 123000LL;
   EXPECT_EQ(micros, expected_micros);
 }

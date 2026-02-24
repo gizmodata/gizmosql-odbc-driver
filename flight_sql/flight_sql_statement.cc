@@ -31,6 +31,13 @@
 #include <odbcabstraction/exceptions.h>
 #include <odbcabstraction/encoding.h>
 
+// timegm is POSIX; Windows provides _mkgmtime instead
+#ifdef _WIN32
+#define portable_timegm _mkgmtime
+#else
+#define portable_timegm timegm
+#endif
+
 namespace driver {
 namespace flight_sql {
 
@@ -621,7 +628,7 @@ void FlightSqlStatement::SetParameters(
           t.tm_year = ds->year - 1900;
           t.tm_mon = ds->month - 1;
           t.tm_mday = ds->day;
-          time_t epoch = timegm(&t);
+          time_t epoch = portable_timegm(&t);
           int32_t days = static_cast<int32_t>(epoch / 86400);
           ThrowIfNotOK(builder.Append(days));
         } else if (binding.c_type == SQL_C_CHAR) {
@@ -633,7 +640,7 @@ void FlightSqlStatement::SetParameters(
             t.tm_year = y - 1900;
             t.tm_mon = m - 1;
             t.tm_mday = d;
-            time_t epoch = timegm(&t);
+            time_t epoch = portable_timegm(&t);
             ThrowIfNotOK(builder.Append(static_cast<int32_t>(epoch / 86400)));
           } else {
             throw DriverException("Cannot parse date string: " + std::string(str), "22007");
@@ -660,7 +667,7 @@ void FlightSqlStatement::SetParameters(
           t.tm_hour = ts->hour;
           t.tm_min = ts->minute;
           t.tm_sec = ts->second;
-          time_t epoch = timegm(&t);
+          time_t epoch = portable_timegm(&t);
           int64_t micros = static_cast<int64_t>(epoch) * 1000000LL +
                            static_cast<int64_t>(ts->fraction) / 1000LL;
           ThrowIfNotOK(builder.Append(micros));
@@ -678,7 +685,7 @@ void FlightSqlStatement::SetParameters(
             t.tm_hour = h;
             t.tm_min = mi;
             t.tm_sec = s;
-            time_t epoch = timegm(&t);
+            time_t epoch = portable_timegm(&t);
             int64_t micros = static_cast<int64_t>(epoch) * 1000000LL +
                              static_cast<int64_t>(frac) / 1000LL;
             ThrowIfNotOK(builder.Append(micros));
