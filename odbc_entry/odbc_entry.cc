@@ -149,12 +149,18 @@ static void FillFunctionBitmap(SQLUSMALLINT *bitmap) {
   SetFunction(bitmap, SQL_API_SQLGETTYPEINFO);
   SetFunction(bitmap, SQL_API_SQLPRIMARYKEYS);
   SetFunction(bitmap, SQL_API_SQLFOREIGNKEYS);
-  SetFunction(bitmap, SQL_API_SQLSTATISTICS);
-  SetFunction(bitmap, SQL_API_SQLSPECIALCOLUMNS);
-  SetFunction(bitmap, SQL_API_SQLPROCEDURES);
-  SetFunction(bitmap, SQL_API_SQLPROCEDURECOLUMNS);
-  SetFunction(bitmap, SQL_API_SQLTABLEPRIVILEGES);
-  SetFunction(bitmap, SQL_API_SQLCOLUMNPRIVILEGES);
+  // NOTE: SQLStatistics and SQLSpecialColumns are NOT listed here because
+  // the driver does not implement them.  Advertising them as supported while
+  // returning SQL_ERROR causes Power Query / Odbc.DataSource to abort
+  // Navigator column discovery ("null Table" for every table).
+  // SetFunction(bitmap, SQL_API_SQLSTATISTICS);
+  // SetFunction(bitmap, SQL_API_SQLSPECIALCOLUMNS);
+  // SQLProcedures, SQLProcedureColumns, SQLTablePrivileges, and
+  // SQLColumnPrivileges are also not implemented (throw HYC00).
+  // SetFunction(bitmap, SQL_API_SQLPROCEDURES);
+  // SetFunction(bitmap, SQL_API_SQLPROCEDURECOLUMNS);
+  // SetFunction(bitmap, SQL_API_SQLTABLEPRIVILEGES);
+  // SetFunction(bitmap, SQL_API_SQLCOLUMNPRIVILEGES);
 
   // Diagnostics
   SetFunction(bitmap, SQL_API_SQLGETDIAGREC);
