@@ -5,7 +5,9 @@
  * See "LICENSE" for license information.
  */
 
-#include <odbcabstraction/platform.h> 
+#include <odbcabstraction/platform.h>
+#include <arrow/array/array_binary.h>
+#include <arrow/builder.h>
 #include "arrow/testing/builder.h"
 #include "record_batch_transformer.h"
 #include "gtest/gtest.h"
@@ -146,5 +148,41 @@ TEST(Transformer, TransformerChangingOrderOfArrayTest) {
   ASSERT_EQ(transformed_record_batch->GetColumnByName("test2"), second_array);
   ASSERT_EQ(transformed_record_batch->GetColumnByName("test1"), first_array);
 }
+TEST(Transformer, TransformerReplaceFieldValuesTest) {
+  // Create a RecordBatch with a string column containing "BASE TABLE" and "VIEW"
+  auto string_builder = std::make_shared<StringBuilder>();
+  ASSERT_TRUE(string_builder->Append("BASE TABLE").ok());
+  ASSERT_TRUE(string_builder->Append("VIEW").ok());
+  ASSERT_TRUE(string_builder->Append("BASE TABLE").ok());
+  ASSERT_TRUE(string_builder->AppendNull().ok());
+
+  std::shared_ptr<Array> string_array;
+  ASSERT_TRUE(string_builder->Finish(&string_array).ok());
+
+  auto schema = arrow::schema({field("table_type", utf8())});
+  auto original_record_batch = RecordBatch::Make(schema, 4, {string_array});
+
+  // Transform: rename and replace "BASE TABLE" -> "TABLE"
+  auto transformer = RecordBatchTransformerWithTasksBuilder(schema)
+                         .ReplaceFieldValues("table_type", "TABLE_TYPE",
+                                             {{"BASE TABLE", "TABLE"}})
+                         .Build();
+
+  auto transformed = transformer->Transform(original_record_batch);
+
+  // Verify schema was renamed
+  ASSERT_EQ(transformed->schema()->GetFieldIndex("TABLE_TYPE"), 0);
+  ASSERT_EQ(transformed->schema()->GetFieldIndex("table_type"), -1);
+
+  // Verify values were replaced
+  auto result_array = std::static_pointer_cast<StringArray>(
+      transformed->GetColumnByName("TABLE_TYPE"));
+  ASSERT_EQ(result_array->length(), 4);
+  ASSERT_EQ(result_array->GetString(0), "TABLE");       // "BASE TABLE" -> "TABLE"
+  ASSERT_EQ(result_array->GetString(1), "VIEW");         // unchanged
+  ASSERT_EQ(result_array->GetString(2), "TABLE");       // "BASE TABLE" -> "TABLE"
+  ASSERT_TRUE(result_array->IsNull(3));                   // null stays null
+}
+
 } // namespace flight_sql
 } // namespace driver

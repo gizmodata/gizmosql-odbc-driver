@@ -10,6 +10,7 @@
 #include <arrow/flight/client.h>
 #include <arrow/type.h>
 #include <memory>
+#include <unordered_map>
 
 namespace driver {
 namespace flight_sql {
@@ -61,6 +62,17 @@ public:
   RecordBatchTransformerWithTasksBuilder &
   AddFieldOfNulls(const std::string &field_name,
                   const std::shared_ptr<DataType> &data_type);
+
+  /// Based on the original field name and a target field name, prepares a task
+  /// that renames the field and replaces string values using the given mapping.
+  /// Values not found in the map are passed through unchanged.
+  /// \param original_name     The original name of the field.
+  /// \param transformed_name  The name after the transformation.
+  /// \param replacements      Map of original values to replacement values.
+  RecordBatchTransformerWithTasksBuilder &
+  ReplaceFieldValues(const std::string &original_name,
+                     const std::string &transformed_name,
+                     const std::unordered_map<std::string, std::string> &replacements);
 
   /// It creates an object of RecordBatchTransformerWithTasksBuilder
   /// \return a RecordBatchTransformerWithTasksBuilder object.

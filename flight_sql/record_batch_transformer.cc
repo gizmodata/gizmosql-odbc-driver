@@ -9,6 +9,7 @@
 #include <odbcabstraction/platform.h> 
 
 #include "utils.h"
+#include <arrow/array/array_binary.h>
 #include <arrow/array/util.h>
 #include <arrow/builder.h>
 #include <iostream>
@@ -126,6 +127,46 @@ RecordBatchTransformerWithTasksBuilder::AddFieldOfNulls(
   task_collection_.emplace_back(empty_fields_task);
 
   new_fields_.push_back(field(field_name, data_type));
+
+  return *this;
+}
+
+RecordBatchTransformerWithTasksBuilder &
+RecordBatchTransformerWithTasksBuilder::ReplaceFieldValues(
+    const std::string &original_name, const std::string &transformed_name,
+    const std::unordered_map<std::string, std::string> &replacements) {
+
+  auto replace_task = [=](const std::shared_ptr<RecordBatch> &original_record,
+                          const std::shared_ptr<Schema> &transformed_schema) {
+    auto original_array = original_record->GetColumnByName(original_name);
+    auto string_array = std::static_pointer_cast<StringArray>(original_array);
+
+    StringBuilder builder;
+    for (int64_t i = 0; i < string_array->length(); ++i) {
+      if (string_array->IsNull(i)) {
+        ThrowIfNotOK(builder.AppendNull());
+      } else {
+        std::string value = string_array->GetString(i);
+        auto it = replacements.find(value);
+        if (it != replacements.end()) {
+          ThrowIfNotOK(builder.Append(it->second));
+        } else {
+          ThrowIfNotOK(builder.Append(value));
+        }
+      }
+    }
+
+    auto result = builder.Finish();
+    ThrowIfNotOK(result.status());
+    return std::static_pointer_cast<Array>(result.ValueOrDie());
+  };
+
+  task_collection_.emplace_back(replace_task);
+
+  auto original_fields = schema_->GetFieldByName(original_name);
+  new_fields_.push_back(
+      field(transformed_name, original_fields->type(),
+            std::shared_ptr<const KeyValueMetadata>()));
 
   return *this;
 }

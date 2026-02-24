@@ -149,7 +149,8 @@ GetTablesForSQLAllTableTypes(const ColumnNames &names,
                          .AddFieldOfNulls(names.catalog_column, utf8())
                          .AddFieldOfNulls(names.schema_column, utf8())
                          .AddFieldOfNulls(names.table_column, utf8())
-                         .RenameField("table_type", names.table_type_column)
+                         .ReplaceFieldValues("table_type", names.table_type_column,
+                                             {{"BASE TABLE", "TABLE"}})
                          .AddFieldOfNulls(names.remarks_column, utf8())
                          .Build();
 
@@ -196,7 +197,8 @@ std::shared_ptr<ResultSet> GetTablesForGenericUse(
      .RenameField("catalog_name", names.catalog_column)
      .RenameField("db_schema_name", names.schema_column)
      .RenameField("table_name", names.table_column)
-     .RenameField("table_type", names.table_type_column)
+     .ReplaceFieldValues("table_type", names.table_type_column,
+                         {{"BASE TABLE", "TABLE"}})
      .AddFieldOfNulls(names.remarks_column, utf8())
      .Build();
 
