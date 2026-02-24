@@ -62,6 +62,10 @@ When unixODBC DM loads the driver, internal calls between exported ODBC function
 - Follow [Keep a Changelog](https://keepachangelog.com/) format
 - Group changes under: Added, Changed, Fixed, Removed
 
+## Debugging
+
+Run the GizmoSQL server with `--log-level debug` to see internal dictionary queries (issued by `DoGetCatalogs`, `DoGetTables`, `DoGetColumns`, etc.) along with bind parameters. This is invaluable for diagnosing ODBC metadata issues — for example, truncated bind parameters revealed the `SqlWCharToString` UTF-16 length bug.
+
 ## CI Notes
 - Windows uses `windows-2022` (not `windows-latest`) for sufficient disk space
 - Windows ARM64 build is disabled — Arrow 23 SSE intrinsics don't cross-compile
