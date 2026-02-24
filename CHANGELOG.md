@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Fix empty Power BI navigation table: ODBC callers (Power Query) filter for table type "TABLE", but DuckDB returns "BASE TABLE" per SQL standard. The driver now maps "TABLE" → "BASE TABLE" when sending the filter to the Flight SQL server, and maps "BASE TABLE" → "TABLE" in the result set so Power Query recognizes the tables.
+- Fix `SqlWCharToString` truncating Wide-char strings to half length: the ODBC `W` function length parameter is in characters (SQLWCHAR units), not bytes, but the conversion divided by `GetSqlWCharSize()`. This caused `SQLColumnsW`, `SQLTablesW`, and other catalog functions to send truncated search patterns (e.g., "memory" → "mem"), resulting in "no visible columns" in Power BI.
 
 ## [v1.0.0] - 2026-02-22
 

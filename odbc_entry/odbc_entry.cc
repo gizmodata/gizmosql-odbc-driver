@@ -42,7 +42,7 @@ static std::string SqlWCharToString(const SQLWCHAR *wstr, SQLSMALLINT len) {
   if (len == SQL_NTS) {
     WcsToUtf8(wstr, &utf8);
   } else {
-    WcsToUtf8(wstr, static_cast<size_t>(len) / GetSqlWCharSize(), &utf8);
+    WcsToUtf8(wstr, static_cast<size_t>(len), &utf8);
   }
   return std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size());
 }
