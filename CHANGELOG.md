@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Fix `SetParameters()` not handling `SQL_C_LONG` (type 4) and `SQL_C_SHORT` (type 5) C types for numeric Arrow types. pyodbc and other ODBC clients may send integer parameters as `SQL_C_LONG` (the generic/undecorated form) rather than `SQL_C_SLONG` (the explicitly signed form), causing "Cannot convert C type 4 to Arrow int64" errors on parameterized queries.
+- Fix `SetParameters()` not handling `SQL_C_WCHAR` for numeric Arrow types. Power BI DirectQuery uses W (wide-char) ODBC functions and sends parameter values as wide strings; the driver now converts SQL_C_WCHAR to UTF-8 before parsing for all supported Arrow types (int16/32/64, float32/64, boolean, date32, timestamp, utf8).
+
 ## [v1.0.0] - 2026-02-24
 
 Initial release.

@@ -427,6 +427,21 @@ void FlightSqlStatement::SetParameters(
       is_null = true;
     }
 
+    // Helper: convert SQL_C_WCHAR binding to UTF-8 string for numeric parsing
+    auto wcharToUtf8 = [&binding]() -> std::string {
+      ssize_t byte_len = binding.indicator_ptr ? *binding.indicator_ptr : -1;
+      size_t wchar_size = odbcabstraction::GetSqlWCharSize();
+      size_t code_units;
+      if (byte_len == SQL_NTS || byte_len < 0) {
+        code_units = odbcabstraction::wcsstrlen(binding.data_ptr);
+      } else {
+        code_units = static_cast<size_t>(byte_len) / wchar_size;
+      }
+      std::vector<uint8_t> utf8_buf;
+      odbcabstraction::WcsToUtf8(binding.data_ptr, code_units, &utf8_buf);
+      return std::string(reinterpret_cast<const char*>(utf8_buf.data()), utf8_buf.size());
+    };
+
     std::shared_ptr<arrow::Array> array;
 
     switch (arrow_type->id()) {
@@ -459,6 +474,7 @@ void FlightSqlStatement::SetParameters(
           char buf[64];
           int written = 0;
           switch (binding.c_type) {
+            case SQL_C_LONG:
             case SQL_C_SLONG:
               written = snprintf(buf, sizeof(buf), "%d",
                                  *static_cast<const int32_t*>(binding.data_ptr));
@@ -475,6 +491,7 @@ void FlightSqlStatement::SetParameters(
               written = snprintf(buf, sizeof(buf), "%llu",
                                  static_cast<unsigned long long>(*static_cast<const uint64_t*>(binding.data_ptr)));
               break;
+            case SQL_C_SHORT:
             case SQL_C_SSHORT:
               written = snprintf(buf, sizeof(buf), "%d",
                                  static_cast<int>(*static_cast<const int16_t*>(binding.data_ptr)));
@@ -503,15 +520,18 @@ void FlightSqlStatement::SetParameters(
         arrow::Int32Builder builder;
         if (is_null) {
           ThrowIfNotOK(builder.AppendNull());
-        } else if (binding.c_type == SQL_C_SLONG) {
+        } else if (binding.c_type == SQL_C_LONG || binding.c_type == SQL_C_SLONG) {
           ThrowIfNotOK(builder.Append(*static_cast<const int32_t*>(binding.data_ptr)));
         } else if (binding.c_type == SQL_C_CHAR) {
           ThrowIfNotOK(builder.Append(
               static_cast<int32_t>(strtol(static_cast<const char*>(binding.data_ptr), nullptr, 10))));
+        } else if (binding.c_type == SQL_C_WCHAR) {
+          auto s = wcharToUtf8();
+          ThrowIfNotOK(builder.Append(static_cast<int32_t>(strtol(s.c_str(), nullptr, 10))));
         } else if (binding.c_type == SQL_C_SBIGINT) {
           ThrowIfNotOK(builder.Append(
               static_cast<int32_t>(*static_cast<const int64_t*>(binding.data_ptr))));
-        } else if (binding.c_type == SQL_C_SSHORT) {
+        } else if (binding.c_type == SQL_C_SHORT || binding.c_type == SQL_C_SSHORT) {
           ThrowIfNotOK(builder.Append(
               static_cast<int32_t>(*static_cast<const int16_t*>(binding.data_ptr))));
         } else {
@@ -528,12 +548,15 @@ void FlightSqlStatement::SetParameters(
           ThrowIfNotOK(builder.AppendNull());
         } else if (binding.c_type == SQL_C_SBIGINT) {
           ThrowIfNotOK(builder.Append(*static_cast<const int64_t*>(binding.data_ptr)));
-        } else if (binding.c_type == SQL_C_SLONG) {
+        } else if (binding.c_type == SQL_C_LONG || binding.c_type == SQL_C_SLONG) {
           ThrowIfNotOK(builder.Append(
               static_cast<int64_t>(*static_cast<const int32_t*>(binding.data_ptr))));
         } else if (binding.c_type == SQL_C_CHAR) {
           ThrowIfNotOK(builder.Append(
               static_cast<int64_t>(strtoll(static_cast<const char*>(binding.data_ptr), nullptr, 10))));
+        } else if (binding.c_type == SQL_C_WCHAR) {
+          auto s = wcharToUtf8();
+          ThrowIfNotOK(builder.Append(static_cast<int64_t>(strtoll(s.c_str(), nullptr, 10))));
         } else {
           throw DriverException(
               "Cannot convert C type " + std::to_string(binding.c_type) + " to Arrow int64", "07006");
@@ -546,14 +569,17 @@ void FlightSqlStatement::SetParameters(
         arrow::Int16Builder builder;
         if (is_null) {
           ThrowIfNotOK(builder.AppendNull());
-        } else if (binding.c_type == SQL_C_SSHORT) {
+        } else if (binding.c_type == SQL_C_SHORT || binding.c_type == SQL_C_SSHORT) {
           ThrowIfNotOK(builder.Append(*static_cast<const int16_t*>(binding.data_ptr)));
-        } else if (binding.c_type == SQL_C_SLONG) {
+        } else if (binding.c_type == SQL_C_LONG || binding.c_type == SQL_C_SLONG) {
           ThrowIfNotOK(builder.Append(
               static_cast<int16_t>(*static_cast<const int32_t*>(binding.data_ptr))));
         } else if (binding.c_type == SQL_C_CHAR) {
           ThrowIfNotOK(builder.Append(
               static_cast<int16_t>(strtol(static_cast<const char*>(binding.data_ptr), nullptr, 10))));
+        } else if (binding.c_type == SQL_C_WCHAR) {
+          auto s = wcharToUtf8();
+          ThrowIfNotOK(builder.Append(static_cast<int16_t>(strtol(s.c_str(), nullptr, 10))));
         } else {
           throw DriverException(
               "Cannot convert C type " + std::to_string(binding.c_type) + " to Arrow int16", "07006");
@@ -573,6 +599,9 @@ void FlightSqlStatement::SetParameters(
               static_cast<double>(*static_cast<const float*>(binding.data_ptr))));
         } else if (binding.c_type == SQL_C_CHAR) {
           ThrowIfNotOK(builder.Append(strtod(static_cast<const char*>(binding.data_ptr), nullptr)));
+        } else if (binding.c_type == SQL_C_WCHAR) {
+          auto s = wcharToUtf8();
+          ThrowIfNotOK(builder.Append(strtod(s.c_str(), nullptr)));
         } else {
           throw DriverException(
               "Cannot convert C type " + std::to_string(binding.c_type) + " to Arrow float64", "07006");
@@ -593,6 +622,9 @@ void FlightSqlStatement::SetParameters(
         } else if (binding.c_type == SQL_C_CHAR) {
           ThrowIfNotOK(builder.Append(
               static_cast<float>(strtod(static_cast<const char*>(binding.data_ptr), nullptr))));
+        } else if (binding.c_type == SQL_C_WCHAR) {
+          auto s = wcharToUtf8();
+          ThrowIfNotOK(builder.Append(static_cast<float>(strtod(s.c_str(), nullptr))));
         } else {
           throw DriverException(
               "Cannot convert C type " + std::to_string(binding.c_type) + " to Arrow float32", "07006");
@@ -610,6 +642,9 @@ void FlightSqlStatement::SetParameters(
         } else if (binding.c_type == SQL_C_CHAR) {
           const char* str = static_cast<const char*>(binding.data_ptr);
           ThrowIfNotOK(builder.Append(str[0] == '1' || str[0] == 't' || str[0] == 'T'));
+        } else if (binding.c_type == SQL_C_WCHAR) {
+          auto s = wcharToUtf8();
+          ThrowIfNotOK(builder.Append(!s.empty() && (s[0] == '1' || s[0] == 't' || s[0] == 'T')));
         } else {
           throw DriverException(
               "Cannot convert C type " + std::to_string(binding.c_type) + " to Arrow boolean", "07006");
@@ -631,9 +666,16 @@ void FlightSqlStatement::SetParameters(
           time_t epoch = portable_timegm(&t);
           int32_t days = static_cast<int32_t>(epoch / 86400);
           ThrowIfNotOK(builder.Append(days));
-        } else if (binding.c_type == SQL_C_CHAR) {
+        } else if (binding.c_type == SQL_C_CHAR || binding.c_type == SQL_C_WCHAR) {
           // Parse "YYYY-MM-DD"
-          const char* str = static_cast<const char*>(binding.data_ptr);
+          std::string str_val;
+          const char* str;
+          if (binding.c_type == SQL_C_WCHAR) {
+            str_val = wcharToUtf8();
+            str = str_val.c_str();
+          } else {
+            str = static_cast<const char*>(binding.data_ptr);
+          }
           int y, m, d;
           if (sscanf(str, "%d-%d-%d", &y, &m, &d) == 3) {
             struct tm t = {};
@@ -671,9 +713,16 @@ void FlightSqlStatement::SetParameters(
           int64_t micros = static_cast<int64_t>(epoch) * 1000000LL +
                            static_cast<int64_t>(ts->fraction) / 1000LL;
           ThrowIfNotOK(builder.Append(micros));
-        } else if (binding.c_type == SQL_C_CHAR) {
+        } else if (binding.c_type == SQL_C_CHAR || binding.c_type == SQL_C_WCHAR) {
           // Parse "YYYY-MM-DD HH:MM:SS[.fff]"
-          const char* str = static_cast<const char*>(binding.data_ptr);
+          std::string str_val;
+          const char* str;
+          if (binding.c_type == SQL_C_WCHAR) {
+            str_val = wcharToUtf8();
+            str = str_val.c_str();
+          } else {
+            str = static_cast<const char*>(binding.data_ptr);
+          }
           int y, mon, d, h, mi, s;
           unsigned int frac = 0;
           int parsed = sscanf(str, "%d-%d-%d %d:%d:%d.%u", &y, &mon, &d, &h, &mi, &s, &frac);

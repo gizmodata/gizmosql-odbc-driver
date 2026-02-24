@@ -20,6 +20,8 @@
 #include <arrow/type.h>
 #include <cstring>
 #include <ctime>
+#include <string>
+#include <vector>
 
 #include <odbcabstraction/platform.h>
 #include <sql.h>
@@ -37,6 +39,21 @@
 
 namespace driver {
 namespace flight_sql {
+
+// Helper: convert SQL_C_WCHAR binding to UTF-8 string for numeric parsing
+static std::string wcharToUtf8(const odbcabstraction::ParameterBinding& binding) {
+  ssize_t byte_len = binding.indicator_ptr ? *binding.indicator_ptr : -1;
+  size_t wchar_size = odbcabstraction::GetSqlWCharSize();
+  size_t code_units;
+  if (byte_len == SQL_NTS || byte_len < 0) {
+    code_units = odbcabstraction::wcsstrlen(binding.data_ptr);
+  } else {
+    code_units = static_cast<size_t>(byte_len) / wchar_size;
+  }
+  std::vector<uint8_t> utf8_buf;
+  odbcabstraction::WcsToUtf8(binding.data_ptr, code_units, &utf8_buf);
+  return std::string(reinterpret_cast<const char*>(utf8_buf.data()), utf8_buf.size());
+}
 
 // Helper: build an Arrow array from an ODBC parameter binding,
 // mirroring the logic in FlightSqlStatement::SetParameters().
@@ -62,6 +79,9 @@ static std::shared_ptr<arrow::Array> BuildArrayFromBinding(
           len = static_cast<ssize_t>(strlen(str));
         }
         EXPECT_TRUE(builder.Append(str, static_cast<int32_t>(len)).ok());
+      } else if (binding.c_type == SQL_C_WCHAR) {
+        auto s = wcharToUtf8(binding);
+        EXPECT_TRUE(builder.Append(s.data(), static_cast<int32_t>(s.size())).ok());
       } else if (binding.c_type == SQL_C_SLONG) {
         char buf[64];
         int written = snprintf(buf, sizeof(buf), "%d",
@@ -81,6 +101,9 @@ static std::shared_ptr<arrow::Array> BuildArrayFromBinding(
       } else if (binding.c_type == SQL_C_CHAR) {
         EXPECT_TRUE(builder.Append(
             static_cast<int32_t>(strtol(static_cast<const char*>(binding.data_ptr), nullptr, 10))).ok());
+      } else if (binding.c_type == SQL_C_WCHAR) {
+        auto s = wcharToUtf8(binding);
+        EXPECT_TRUE(builder.Append(static_cast<int32_t>(strtol(s.c_str(), nullptr, 10))).ok());
       }
       EXPECT_TRUE(builder.Finish(&array).ok());
       break;
@@ -98,6 +121,9 @@ static std::shared_ptr<arrow::Array> BuildArrayFromBinding(
       } else if (binding.c_type == SQL_C_CHAR) {
         EXPECT_TRUE(builder.Append(
             static_cast<int64_t>(strtoll(static_cast<const char*>(binding.data_ptr), nullptr, 10))).ok());
+      } else if (binding.c_type == SQL_C_WCHAR) {
+        auto s = wcharToUtf8(binding);
+        EXPECT_TRUE(builder.Append(static_cast<int64_t>(strtoll(s.c_str(), nullptr, 10))).ok());
       }
       EXPECT_TRUE(builder.Finish(&array).ok());
       break;
@@ -112,6 +138,9 @@ static std::shared_ptr<arrow::Array> BuildArrayFromBinding(
       } else if (binding.c_type == SQL_C_CHAR) {
         EXPECT_TRUE(builder.Append(
             static_cast<int16_t>(strtol(static_cast<const char*>(binding.data_ptr), nullptr, 10))).ok());
+      } else if (binding.c_type == SQL_C_WCHAR) {
+        auto s = wcharToUtf8(binding);
+        EXPECT_TRUE(builder.Append(static_cast<int16_t>(strtol(s.c_str(), nullptr, 10))).ok());
       }
       EXPECT_TRUE(builder.Finish(&array).ok());
       break;
@@ -125,6 +154,9 @@ static std::shared_ptr<arrow::Array> BuildArrayFromBinding(
         EXPECT_TRUE(builder.Append(*static_cast<const double*>(binding.data_ptr)).ok());
       } else if (binding.c_type == SQL_C_CHAR) {
         EXPECT_TRUE(builder.Append(strtod(static_cast<const char*>(binding.data_ptr), nullptr)).ok());
+      } else if (binding.c_type == SQL_C_WCHAR) {
+        auto s = wcharToUtf8(binding);
+        EXPECT_TRUE(builder.Append(strtod(s.c_str(), nullptr)).ok());
       }
       EXPECT_TRUE(builder.Finish(&array).ok());
       break;
@@ -139,6 +171,9 @@ static std::shared_ptr<arrow::Array> BuildArrayFromBinding(
       } else if (binding.c_type == SQL_C_CHAR) {
         EXPECT_TRUE(builder.Append(
             static_cast<float>(strtod(static_cast<const char*>(binding.data_ptr), nullptr))).ok());
+      } else if (binding.c_type == SQL_C_WCHAR) {
+        auto s = wcharToUtf8(binding);
+        EXPECT_TRUE(builder.Append(static_cast<float>(strtod(s.c_str(), nullptr))).ok());
       }
       EXPECT_TRUE(builder.Finish(&array).ok());
       break;
@@ -153,6 +188,9 @@ static std::shared_ptr<arrow::Array> BuildArrayFromBinding(
       } else if (binding.c_type == SQL_C_CHAR) {
         const char* str = static_cast<const char*>(binding.data_ptr);
         EXPECT_TRUE(builder.Append(str[0] == '1' || str[0] == 't' || str[0] == 'T').ok());
+      } else if (binding.c_type == SQL_C_WCHAR) {
+        auto s = wcharToUtf8(binding);
+        EXPECT_TRUE(builder.Append(!s.empty() && (s[0] == '1' || s[0] == 't' || s[0] == 'T')).ok());
       }
       EXPECT_TRUE(builder.Finish(&array).ok());
       break;
@@ -614,6 +652,137 @@ TEST(ParameterBinding, RecordBatch_MultipleParams) {
 
   auto col2 = std::static_pointer_cast<arrow::DoubleArray>(batch->column(2));
   EXPECT_DOUBLE_EQ(col2->Value(0), 95.5);
+}
+
+// ============================================================================
+// SQL_C_WCHAR parameter tests (Power BI sends values as wide strings)
+// ============================================================================
+
+// Helper: create a wide-char buffer from a UTF-8 string for testing.
+// On macOS, SQLWCHAR is 4 bytes (UTF-32); on Windows, 2 bytes (UTF-16).
+// For ASCII test strings, each char maps to one code unit either way.
+static std::vector<uint8_t> MakeWcharBuffer(const char* utf8_str) {
+  size_t wchar_size = odbcabstraction::GetSqlWCharSize();
+  size_t len = strlen(utf8_str);
+  // Allocate space for chars + null terminator
+  std::vector<uint8_t> buf((len + 1) * wchar_size, 0);
+  for (size_t i = 0; i < len; ++i) {
+    buf[i * wchar_size] = static_cast<uint8_t>(utf8_str[i]);
+    // Remaining bytes in each code unit are already zero-initialized
+  }
+  return buf;
+}
+
+TEST(ParameterBinding, Int64_from_WCHAR) {
+  auto wbuf = MakeWcharBuffer("42");
+  ssize_t indicator = SQL_NTS;
+  odbcabstraction::ParameterBinding binding = {};
+  binding.data_ptr = wbuf.data();
+  binding.indicator_ptr = &indicator;
+  binding.c_type = SQL_C_WCHAR;
+
+  auto array = BuildArrayFromBinding(arrow::int64(), binding);
+  ASSERT_NE(array, nullptr);
+  auto typed = std::static_pointer_cast<arrow::Int64Array>(array);
+  EXPECT_EQ(typed->Value(0), 42);
+}
+
+TEST(ParameterBinding, Int32_from_WCHAR) {
+  auto wbuf = MakeWcharBuffer("12345");
+  ssize_t indicator = SQL_NTS;
+  odbcabstraction::ParameterBinding binding = {};
+  binding.data_ptr = wbuf.data();
+  binding.indicator_ptr = &indicator;
+  binding.c_type = SQL_C_WCHAR;
+
+  auto array = BuildArrayFromBinding(arrow::int32(), binding);
+  ASSERT_NE(array, nullptr);
+  auto typed = std::static_pointer_cast<arrow::Int32Array>(array);
+  EXPECT_EQ(typed->Value(0), 12345);
+}
+
+TEST(ParameterBinding, Int16_from_WCHAR) {
+  auto wbuf = MakeWcharBuffer("300");
+  ssize_t indicator = SQL_NTS;
+  odbcabstraction::ParameterBinding binding = {};
+  binding.data_ptr = wbuf.data();
+  binding.indicator_ptr = &indicator;
+  binding.c_type = SQL_C_WCHAR;
+
+  auto array = BuildArrayFromBinding(arrow::int16(), binding);
+  ASSERT_NE(array, nullptr);
+  auto typed = std::static_pointer_cast<arrow::Int16Array>(array);
+  EXPECT_EQ(typed->Value(0), 300);
+}
+
+TEST(ParameterBinding, Double_from_WCHAR) {
+  auto wbuf = MakeWcharBuffer("3.14159");
+  ssize_t indicator = SQL_NTS;
+  odbcabstraction::ParameterBinding binding = {};
+  binding.data_ptr = wbuf.data();
+  binding.indicator_ptr = &indicator;
+  binding.c_type = SQL_C_WCHAR;
+
+  auto array = BuildArrayFromBinding(arrow::float64(), binding);
+  ASSERT_NE(array, nullptr);
+  auto typed = std::static_pointer_cast<arrow::DoubleArray>(array);
+  EXPECT_DOUBLE_EQ(typed->Value(0), 3.14159);
+}
+
+TEST(ParameterBinding, Float_from_WCHAR) {
+  auto wbuf = MakeWcharBuffer("1.5");
+  ssize_t indicator = SQL_NTS;
+  odbcabstraction::ParameterBinding binding = {};
+  binding.data_ptr = wbuf.data();
+  binding.indicator_ptr = &indicator;
+  binding.c_type = SQL_C_WCHAR;
+
+  auto array = BuildArrayFromBinding(arrow::float32(), binding);
+  ASSERT_NE(array, nullptr);
+  auto typed = std::static_pointer_cast<arrow::FloatArray>(array);
+  EXPECT_FLOAT_EQ(typed->Value(0), 1.5f);
+}
+
+TEST(ParameterBinding, Boolean_from_WCHAR_true) {
+  auto wbuf = MakeWcharBuffer("1");
+  ssize_t indicator = SQL_NTS;
+  odbcabstraction::ParameterBinding binding = {};
+  binding.data_ptr = wbuf.data();
+  binding.indicator_ptr = &indicator;
+  binding.c_type = SQL_C_WCHAR;
+
+  auto array = BuildArrayFromBinding(arrow::boolean(), binding);
+  ASSERT_NE(array, nullptr);
+  auto typed = std::static_pointer_cast<arrow::BooleanArray>(array);
+  EXPECT_TRUE(typed->Value(0));
+}
+
+TEST(ParameterBinding, Boolean_from_WCHAR_false) {
+  auto wbuf = MakeWcharBuffer("0");
+  ssize_t indicator = SQL_NTS;
+  odbcabstraction::ParameterBinding binding = {};
+  binding.data_ptr = wbuf.data();
+  binding.indicator_ptr = &indicator;
+  binding.c_type = SQL_C_WCHAR;
+
+  auto array = BuildArrayFromBinding(arrow::boolean(), binding);
+  ASSERT_NE(array, nullptr);
+  auto typed = std::static_pointer_cast<arrow::BooleanArray>(array);
+  EXPECT_FALSE(typed->Value(0));
+}
+
+TEST(ParameterBinding, String_from_WCHAR) {
+  auto wbuf = MakeWcharBuffer("hello world");
+  ssize_t indicator = SQL_NTS;
+  odbcabstraction::ParameterBinding binding = {};
+  binding.data_ptr = wbuf.data();
+  binding.indicator_ptr = &indicator;
+  binding.c_type = SQL_C_WCHAR;
+
+  auto array = BuildArrayFromBinding(arrow::utf8(), binding);
+  ASSERT_NE(array, nullptr);
+  auto typed = std::static_pointer_cast<arrow::StringArray>(array);
+  EXPECT_EQ(typed->GetString(0), "hello world");
 }
 
 } // namespace flight_sql
