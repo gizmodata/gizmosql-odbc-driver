@@ -251,6 +251,50 @@ std::string TranslateScalarFunction(const std::string &body) {
     return "DAY(" + args[0] + ")";
   }
 
+  // CONVERT(value, SQL_type) → CAST(value AS type)
+  // ODBC defines {fn CONVERT(expr, SQL_BIGINT)} etc.
+  if (funcName == "convert" && args.size() == 2) {
+    std::string sqlType = args[1];
+    std::transform(sqlType.begin(), sqlType.end(), sqlType.begin(), ::toupper);
+    // Trim whitespace from the type name
+    sqlType = Trim(sqlType);
+
+    std::string duckType;
+    if (sqlType == "SQL_VARCHAR" || sqlType == "SQL_WVARCHAR" ||
+        sqlType == "SQL_LONGVARCHAR" || sqlType == "SQL_WLONGVARCHAR")
+      duckType = "VARCHAR";
+    else if (sqlType == "SQL_CHAR" || sqlType == "SQL_WCHAR")
+      duckType = "VARCHAR";
+    else if (sqlType == "SQL_INTEGER")
+      duckType = "INTEGER";
+    else if (sqlType == "SQL_SMALLINT")
+      duckType = "SMALLINT";
+    else if (sqlType == "SQL_TINYINT")
+      duckType = "TINYINT";
+    else if (sqlType == "SQL_BIGINT")
+      duckType = "BIGINT";
+    else if (sqlType == "SQL_FLOAT" || sqlType == "SQL_REAL")
+      duckType = "FLOAT";
+    else if (sqlType == "SQL_DOUBLE")
+      duckType = "DOUBLE";
+    else if (sqlType == "SQL_DECIMAL" || sqlType == "SQL_NUMERIC")
+      duckType = "DECIMAL";
+    else if (sqlType == "SQL_BIT")
+      duckType = "BOOLEAN";
+    else if (sqlType == "SQL_DATE" || sqlType == "SQL_TYPE_DATE")
+      duckType = "DATE";
+    else if (sqlType == "SQL_TIME" || sqlType == "SQL_TYPE_TIME")
+      duckType = "TIME";
+    else if (sqlType == "SQL_TIMESTAMP" || sqlType == "SQL_TYPE_TIMESTAMP")
+      duckType = "TIMESTAMP";
+    else if (sqlType == "SQL_BINARY" || sqlType == "SQL_VARBINARY" || sqlType == "SQL_LONGVARBINARY")
+      duckType = "BLOB";
+    else
+      duckType = sqlType; // pass through unknown types
+
+    return "CAST(" + args[0] + " AS " + duckType + ")";
+  }
+
   // DAYOFWEEK(x) → DAYOFWEEK(x)  (DuckDB supports this)
   // DAYOFYEAR(x) → DAYOFYEAR(x)
   // YEAR, MONTH, QUARTER, WEEK, HOUR, MINUTE, SECOND — DuckDB supports all natively
@@ -292,6 +336,17 @@ std::string TranslateEscape(const std::string &inner) {
   if (StartsWithCI(processed, "fn ") || StartsWithCI(processed, "fn\t")) {
     std::string body = Trim(processed.substr(2));
     return TranslateScalarFunction(body);
+  }
+
+  // LIKE escape character: escape 'x' → ESCAPE 'x'
+  if (StartsWithCI(processed, "escape ") || StartsWithCI(processed, "escape\t")) {
+    std::string val = Trim(processed.substr(6));
+    return "ESCAPE " + val;
+  }
+
+  // Outer join: oj table LEFT OUTER JOIN ... → just strip the {oj} wrapper
+  if (StartsWithCI(processed, "oj ") || StartsWithCI(processed, "oj\t")) {
+    return Trim(processed.substr(2));
   }
 
   // Unknown escape type — return content as-is (without braces)

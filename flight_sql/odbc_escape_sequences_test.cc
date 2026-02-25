@@ -220,5 +220,96 @@ TEST(OdbcEscapeSequences, MixedContent) {
   EXPECT_EQ(expected, TranslateOdbcEscapes(input));
 }
 
+// === LIKE Escape Character ===
+
+TEST(OdbcEscapeSequences, LikeEscapeChar) {
+  EXPECT_EQ("SELECT * FROM t WHERE col LIKE '%\\_%' ESCAPE '\\'",
+            TranslateOdbcEscapes("SELECT * FROM t WHERE col LIKE '%\\_%' {escape '\\'}"));
+}
+
+TEST(OdbcEscapeSequences, LikeEscapeCharHash) {
+  EXPECT_EQ("SELECT * FROM t WHERE col LIKE 'foo#%bar' ESCAPE '#'",
+            TranslateOdbcEscapes("SELECT * FROM t WHERE col LIKE 'foo#%bar' {escape '#'}"));
+}
+
+// === Outer Join Escape ===
+
+TEST(OdbcEscapeSequences, OuterJoinEscape) {
+  EXPECT_EQ("\"t1\" LEFT OUTER JOIN \"t2\" ON \"t1\".\"id\" = \"t2\".\"id\"",
+            TranslateOdbcEscapes("{oj \"t1\" LEFT OUTER JOIN \"t2\" ON \"t1\".\"id\" = \"t2\".\"id\"}"));
+}
+
+// === CONVERT (type casting) ===
+
+TEST(OdbcEscapeSequences, ConvertToVarchar) {
+  EXPECT_EQ("CAST(\"col\" AS VARCHAR)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_VARCHAR) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToInteger) {
+  EXPECT_EQ("CAST(\"col\" AS INTEGER)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_INTEGER) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToBigint) {
+  EXPECT_EQ("CAST(\"col\" AS BIGINT)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_BIGINT) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToDouble) {
+  EXPECT_EQ("CAST(\"col\" AS DOUBLE)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_DOUBLE) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToFloat) {
+  EXPECT_EQ("CAST(\"col\" AS FLOAT)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_FLOAT) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToDate) {
+  EXPECT_EQ("CAST(\"col\" AS DATE)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_TYPE_DATE) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToTimestamp) {
+  EXPECT_EQ("CAST(\"col\" AS TIMESTAMP)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_TYPE_TIMESTAMP) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToBoolean) {
+  EXPECT_EQ("CAST(\"col\" AS BOOLEAN)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_BIT) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToSmallint) {
+  EXPECT_EQ("CAST(\"col\" AS SMALLINT)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_SMALLINT) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToDecimal) {
+  EXPECT_EQ("CAST(\"col\" AS DECIMAL)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_DECIMAL) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToBlob) {
+  EXPECT_EQ("CAST(\"col\" AS BLOB)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_VARBINARY) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToTime) {
+  EXPECT_EQ("CAST(\"col\" AS TIME)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_TYPE_TIME) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToWVarchar) {
+  EXPECT_EQ("CAST(\"col\" AS VARCHAR)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_WVARCHAR) }"));
+}
+
+TEST(OdbcEscapeSequences, ConvertToTinyint) {
+  EXPECT_EQ("CAST(\"col\" AS TINYINT)",
+            TranslateOdbcEscapes("{ fn CONVERT(\"col\", SQL_TINYINT) }"));
+}
+
 } // namespace flight_sql
 } // namespace driver
