@@ -75,27 +75,27 @@ TEST(OdbcEscapeSequences, FnCurtime) {
 // === TIMESTAMPADD / TIMESTAMPDIFF ===
 
 TEST(OdbcEscapeSequences, TimestampAdd_Day) {
-  EXPECT_EQ("dateadd('day', 5, \"col\")",
+  EXPECT_EQ("date_add(\"col\", INTERVAL (5) DAY)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_DAY, 5, \"col\") }"));
 }
 
 TEST(OdbcEscapeSequences, TimestampAdd_Month) {
-  EXPECT_EQ("dateadd('month', 3, x)",
+  EXPECT_EQ("date_add(x, INTERVAL (3) MONTH)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_MONTH, 3, x) }"));
 }
 
 TEST(OdbcEscapeSequences, TimestampAdd_Year) {
-  EXPECT_EQ("dateadd('year', 1, x)",
+  EXPECT_EQ("date_add(x, INTERVAL (1) YEAR)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_YEAR, 1, x) }"));
 }
 
 TEST(OdbcEscapeSequences, TimestampDiff_Day) {
-  EXPECT_EQ("datediff('day', \"a\", \"b\")",
+  EXPECT_EQ("date_diff('day', \"a\", \"b\")",
             TranslateOdbcEscapes("{ fn timestampdiff(SQL_TSI_DAY, \"a\", \"b\") }"));
 }
 
 TEST(OdbcEscapeSequences, TimestampDiff_Second) {
-  EXPECT_EQ("datediff('second', x, y)",
+  EXPECT_EQ("date_diff('second', x, y)",
             TranslateOdbcEscapes("{ fn timestampdiff(SQL_TSI_SECOND, x, y) }"));
 }
 
@@ -103,7 +103,7 @@ TEST(OdbcEscapeSequences, TimestampDiff_Second) {
 
 TEST(OdbcEscapeSequences, NestedDateInFunction) {
   // { fn timestampdiff(SQL_TSI_DAY, {d '2000-01-01'}, "C1") }
-  EXPECT_EQ("datediff('day', DATE '2000-01-01', \"C1\")",
+  EXPECT_EQ("date_diff('day', DATE '2000-01-01', \"C1\")",
             TranslateOdbcEscapes("{ fn timestampdiff(SQL_TSI_DAY, {d '2000-01-01'}, \"C1\") }"));
 }
 
@@ -114,9 +114,8 @@ TEST(OdbcEscapeSequences, NestedFunctionInFunction) {
       "{ fn timestampdiff(SQL_TSI_DAY, {d '2000-01-01'}, \"C1\") }, "
       "{ts '2000-01-01 00:00:00'}) }";
   std::string expected =
-      "dateadd('day', "
-      "datediff('day', DATE '2000-01-01', \"C1\"), "
-      "TIMESTAMP '2000-01-01 00:00:00')";
+      "date_add(TIMESTAMP '2000-01-01 00:00:00', "
+      "INTERVAL (date_diff('day', DATE '2000-01-01', \"C1\")) DAY)";
   EXPECT_EQ(expected, TranslateOdbcEscapes(input));
 }
 
@@ -160,8 +159,8 @@ TEST(OdbcEscapeSequences, PowerBIDateQuery) {
   EXPECT_EQ(std::string::npos, result.find("{ts "));
 
   // Should contain translated functions
-  EXPECT_NE(std::string::npos, result.find("dateadd("));
-  EXPECT_NE(std::string::npos, result.find("datediff("));
+  EXPECT_NE(std::string::npos, result.find("date_add("));
+  EXPECT_NE(std::string::npos, result.find("date_diff("));
   EXPECT_NE(std::string::npos, result.find("DATE '2000-01-01'"));
   EXPECT_NE(std::string::npos, result.find("TIMESTAMP '2000-01-01 00:00:00'"));
   EXPECT_NE(std::string::npos, result.find("TIMESTAMP '1899-12-28 00:00:00'"));
@@ -193,23 +192,23 @@ TEST(OdbcEscapeSequences, EmptyString) {
 // === All SQL_TSI intervals ===
 
 TEST(OdbcEscapeSequences, AllTsiIntervals) {
-  EXPECT_EQ("dateadd('microsecond', 1, x)",
+  EXPECT_EQ("date_add(x, INTERVAL (1) MICROSECOND)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_FRAC_SECOND, 1, x) }"));
-  EXPECT_EQ("dateadd('second', 1, x)",
+  EXPECT_EQ("date_add(x, INTERVAL (1) SECOND)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_SECOND, 1, x) }"));
-  EXPECT_EQ("dateadd('minute', 1, x)",
+  EXPECT_EQ("date_add(x, INTERVAL (1) MINUTE)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_MINUTE, 1, x) }"));
-  EXPECT_EQ("dateadd('hour', 1, x)",
+  EXPECT_EQ("date_add(x, INTERVAL (1) HOUR)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_HOUR, 1, x) }"));
-  EXPECT_EQ("dateadd('day', 1, x)",
+  EXPECT_EQ("date_add(x, INTERVAL (1) DAY)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_DAY, 1, x) }"));
-  EXPECT_EQ("dateadd('week', 1, x)",
+  EXPECT_EQ("date_add(x, INTERVAL (1) WEEK)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_WEEK, 1, x) }"));
-  EXPECT_EQ("dateadd('month', 1, x)",
+  EXPECT_EQ("date_add(x, INTERVAL (1) MONTH)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_MONTH, 1, x) }"));
-  EXPECT_EQ("dateadd('quarter', 1, x)",
+  EXPECT_EQ("date_add(x, INTERVAL (1) QUARTER)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_QUARTER, 1, x) }"));
-  EXPECT_EQ("dateadd('year', 1, x)",
+  EXPECT_EQ("date_add(x, INTERVAL (1) YEAR)",
             TranslateOdbcEscapes("{ fn timestampadd(SQL_TSI_YEAR, 1, x) }"));
 }
 

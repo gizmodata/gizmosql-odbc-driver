@@ -16,9 +16,8 @@ namespace flight_sql {
 
 namespace {
 
-// Map SQL_TSI_xxx interval keywords to DuckDB datepart strings.
-std::string TranslateTsiInterval(const std::string &tsi) {
-  // Normalize to uppercase for matching.
+// Map SQL_TSI_xxx interval keywords to DuckDB datepart strings (quoted, for date_diff).
+std::string TranslateTsiToPart(const std::string &tsi) {
   std::string upper = tsi;
   std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
 
@@ -31,7 +30,23 @@ std::string TranslateTsiInterval(const std::string &tsi) {
   if (upper == "SQL_TSI_MONTH")       return "'month'";
   if (upper == "SQL_TSI_QUARTER")     return "'quarter'";
   if (upper == "SQL_TSI_YEAR")        return "'year'";
-  // Unknown interval — return as-is (will likely cause a backend error).
+  return tsi;
+}
+
+// Map SQL_TSI_xxx interval keywords to DuckDB INTERVAL unit names (unquoted, for date_add).
+std::string TranslateTsiToUnit(const std::string &tsi) {
+  std::string upper = tsi;
+  std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
+
+  if (upper == "SQL_TSI_FRAC_SECOND") return "MICROSECOND";
+  if (upper == "SQL_TSI_SECOND")      return "SECOND";
+  if (upper == "SQL_TSI_MINUTE")      return "MINUTE";
+  if (upper == "SQL_TSI_HOUR")        return "HOUR";
+  if (upper == "SQL_TSI_DAY")         return "DAY";
+  if (upper == "SQL_TSI_WEEK")        return "WEEK";
+  if (upper == "SQL_TSI_MONTH")       return "MONTH";
+  if (upper == "SQL_TSI_QUARTER")     return "QUARTER";
+  if (upper == "SQL_TSI_YEAR")        return "YEAR";
   return tsi;
 }
 
@@ -206,14 +221,14 @@ std::string TranslateScalarFunction(const std::string &body) {
 
   auto args = SplitArgs(argsStr);
 
-  // timestampadd(interval, count, timestamp) → dateadd(interval_str, count, timestamp)
+  // timestampadd(interval, count, base) → date_add(base, INTERVAL (count) UNIT)
   if (funcName == "timestampadd" && args.size() == 3) {
-    return "dateadd(" + TranslateTsiInterval(args[0]) + ", " + args[1] + ", " + args[2] + ")";
+    return "date_add(" + args[2] + ", INTERVAL (" + args[1] + ") " + TranslateTsiToUnit(args[0]) + ")";
   }
 
-  // timestampdiff(interval, ts1, ts2) → datediff(interval_str, ts1, ts2)
+  // timestampdiff(interval, ts1, ts2) → date_diff('part', ts1, ts2)
   if (funcName == "timestampdiff" && args.size() == 3) {
-    return "datediff(" + TranslateTsiInterval(args[0]) + ", " + args[1] + ", " + args[2] + ")";
+    return "date_diff(" + TranslateTsiToPart(args[0]) + ", " + args[1] + ", " + args[2] + ")";
   }
 
   // CURDATE() → CURRENT_DATE
