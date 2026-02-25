@@ -12,6 +12,7 @@ The GizmoSQL ODBC Driver enables BI tools, applications, and languages with ODBC
 Key features:
 - Full ODBC 3.x compliance
 - Power BI DirectQuery and Import mode support (via the [GizmoSQL Power BI Connector](https://github.com/gizmodata/gizmosql-powerbi-connector))
+- Primary key and foreign key discovery (`SQLPrimaryKeys` / `SQLForeignKeys`) — enables Power BI and other BI tools to auto-detect table relationships
 - TLS/SSL encryption with system trust store support
 - Basic, token, and OAuth authentication
 - HTTP/2 keepalive ping frames for long-running connections

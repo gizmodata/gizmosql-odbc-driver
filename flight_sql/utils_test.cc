@@ -143,6 +143,15 @@ TEST(Utils, ConvertSqlPatternToRegexString) {
   ASSERT_EQ(std::string("X_Y"), ConvertSqlPatternToRegexString("X\\_Y"));
 }
 
+TEST(Utils, StripOdbcSearchPatternEscapes) {
+  ASSERT_EQ("lineitem", StripOdbcSearchPatternEscapes("lineitem"));
+  ASSERT_EQ("pk_test_customers", StripOdbcSearchPatternEscapes("pk\\_test\\_customers"));
+  ASSERT_EQ("table%name", StripOdbcSearchPatternEscapes("table\\%name"));
+  ASSERT_EQ("no_escapes", StripOdbcSearchPatternEscapes("no_escapes"));
+  ASSERT_EQ("", StripOdbcSearchPatternEscapes(""));
+  ASSERT_EQ("trailing\\", StripOdbcSearchPatternEscapes("trailing\\"));
+}
+
 TEST(Utils, ConvertToDBMSVer) {
   ASSERT_EQ(std::string("01.02.0003"), ConvertToDBMSVer("1.2.3"));
   ASSERT_EQ(std::string("01.02.0003.0"), ConvertToDBMSVer("1.2.3.0"));

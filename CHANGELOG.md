@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 - `GetLocalTypeName()` now falls back to computing the type name from the Arrow field type, matching the `GetTypeName()` fix.
 
 ### Added
+- Wire up `SQLPrimaryKeys` and `SQLForeignKeys` to Flight SQL `GetPrimaryKeys`, `GetExportedKeys`, `GetImportedKeys`, and `GetCrossReference` RPCs. Previously these returned empty result sets, so Power BI could not discover primary key / foreign key relationships. The server returns `int32` for KEY_SEQ and `uint8` for UPDATE_RULE / DELETE_RULE, but ODBC expects `int16` — a new `CastField` transformer bridges the type gap via `arrow::compute::Cast`.
+- Add integration tests for `SQLPrimaryKeys` and `SQLForeignKeys` (imported keys and exported keys paths) to verify end-to-end PK/FK discovery against a live GizmoSQL server.
 - Optional ODBC trace logging to `C:\odbc_trace.log`, enabled by setting environment variable `GIZMOSQL_ODBC_TRACE=1`. Logs all major ODBC function calls with parameters and return values for debugging Power BI and other ODBC client interactions.
 
 ## [v1.0.0-rc1] - 2026-02-24

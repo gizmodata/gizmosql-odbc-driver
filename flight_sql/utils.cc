@@ -700,6 +700,19 @@ boost::xpressive::sregex ConvertSqlPatternToRegex(const std::string &pattern) {
   return boost::xpressive::sregex(boost::xpressive::sregex::compile(regex_str));
 }
 
+std::string StripOdbcSearchPatternEscapes(const std::string &pattern) {
+  std::string result;
+  result.reserve(pattern.size());
+  for (size_t i = 0; i < pattern.size(); ++i) {
+    if (pattern[i] == '\\' && i + 1 < pattern.size() &&
+        (pattern[i + 1] == '_' || pattern[i + 1] == '%')) {
+      continue; // skip the backslash, next iteration appends the literal char
+    }
+    result += pattern[i];
+  }
+  return result;
+}
+
 bool NeedArrayConversion(arrow::Type::type original_type_id, odbcabstraction::CDataType data_type) {
   switch (original_type_id) {
     case arrow::Type::DATE32:

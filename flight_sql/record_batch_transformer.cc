@@ -6,12 +6,14 @@
  */
 
 #include "record_batch_transformer.h"
-#include <odbcabstraction/platform.h> 
+#include <odbcabstraction/platform.h>
 
 #include "utils.h"
 #include <arrow/array/array_binary.h>
 #include <arrow/array/util.h>
 #include <arrow/builder.h>
+#include <arrow/compute/cast.h>
+#include <arrow/compute/initialize.h>
 #include <iostream>
 #include <utility>
 
@@ -167,6 +169,30 @@ RecordBatchTransformerWithTasksBuilder::ReplaceFieldValues(
   new_fields_.push_back(
       field(transformed_name, original_fields->type(),
             std::shared_ptr<const KeyValueMetadata>()));
+
+  return *this;
+}
+
+RecordBatchTransformerWithTasksBuilder &
+RecordBatchTransformerWithTasksBuilder::CastField(
+    const std::string &original_name, const std::string &transformed_name,
+    const std::shared_ptr<DataType> &target_type) {
+
+  auto cast_task = [=](const std::shared_ptr<RecordBatch> &original_record,
+                       const std::shared_ptr<Schema> &transformed_schema) {
+    // Arrow 23 requires explicit initialization of compute kernels
+    static auto compute_init = arrow::compute::Initialize();
+    ThrowIfNotOK(compute_init);
+
+    auto original_array = original_record->GetColumnByName(original_name);
+    auto cast_result = arrow::compute::Cast(*original_array, target_type);
+    ThrowIfNotOK(cast_result.status());
+
+    return cast_result.ValueOrDie();
+  };
+
+  task_collection_.emplace_back(cast_task);
+  new_fields_.push_back(field(transformed_name, target_type));
 
   return *this;
 }

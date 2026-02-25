@@ -252,8 +252,18 @@ std::shared_ptr<ResultSet> FlightSqlStatement::GetColumns_V2(
     const std::string *table_name, const std::string *column_name) {
   ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
+  // Strip ODBC search-pattern escape characters (e.g. "pk\_test" -> "pk_test")
+  // before passing to the Flight SQL GetTables RPC, which doesn't understand
+  // ODBC-style backslash escaping of wildcards.
+  std::string unescaped_table;
+  const std::string *effective_table_name = table_name;
+  if (table_name) {
+    unescaped_table = StripOdbcSearchPatternEscapes(*table_name);
+    effective_table_name = &unescaped_table;
+  }
+
   Result<std::shared_ptr<FlightInfo>> result = sql_client_.GetTables(
-      call_options_, catalog_name, schema_name, table_name, true, nullptr);
+      call_options_, catalog_name, schema_name, effective_table_name, true, nullptr);
   ThrowIfNotOK(result.status());
 
   auto flight_info = result.ValueOrDie();
@@ -272,8 +282,18 @@ std::shared_ptr<ResultSet> FlightSqlStatement::GetColumns_V3(
     const std::string *table_name, const std::string *column_name) {
   ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
+  // Strip ODBC search-pattern escape characters (e.g. "pk\_test" -> "pk_test")
+  // before passing to the Flight SQL GetTables RPC, which doesn't understand
+  // ODBC-style backslash escaping of wildcards.
+  std::string unescaped_table;
+  const std::string *effective_table_name = table_name;
+  if (table_name) {
+    unescaped_table = StripOdbcSearchPatternEscapes(*table_name);
+    effective_table_name = &unescaped_table;
+  }
+
   Result<std::shared_ptr<FlightInfo>> result = sql_client_.GetTables(
-      call_options_, catalog_name, schema_name, table_name, true, nullptr);
+      call_options_, catalog_name, schema_name, effective_table_name, true, nullptr);
   ThrowIfNotOK(result.status());
 
   auto flight_info = result.ValueOrDie();
@@ -328,23 +348,33 @@ std::shared_ptr<ResultSet> FlightSqlStatement::GetPrimaryKeys(
     const std::string *table_name) {
   ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
-  auto schema = arrow::schema({
-    arrow::field("TABLE_CAT", arrow::utf8(), true),      // nullable
-    arrow::field("TABLE_SCHEM", arrow::utf8(), true),    // nullable
-    arrow::field("TABLE_NAME", arrow::utf8(), false),    // not nullable
-    arrow::field("COLUMN_NAME", arrow::utf8(), false),   // not nullable
-    arrow::field("KEY_SEQ", arrow::int16(), false),      // not nullable
-    arrow::field("PK_NAME", arrow::utf8(), true)         // nullable
-  });
+  arrow::flight::sql::TableRef table_ref;
+  if (catalog_name) table_ref.catalog = StripOdbcSearchPatternEscapes(*catalog_name);
+  if (schema_name)  table_ref.db_schema = StripOdbcSearchPatternEscapes(*schema_name);
+  table_ref.table = table_name ? StripOdbcSearchPatternEscapes(*table_name) : "";
 
-  auto flight_info_result = arrow::flight::FlightInfo::Make(
-    *schema, arrow::flight::FlightDescriptor::Command(""),
-    std::vector<arrow::flight::FlightEndpoint>(), 0, 0);
-  ThrowIfNotOK(flight_info_result.status());
-  auto flight_info = std::make_shared<arrow::flight::FlightInfo>(std::move(flight_info_result.ValueOrDie()));
+  auto result = sql_client_.GetPrimaryKeys(call_options_, table_ref);
+  ThrowIfNotOK(result.status());
+  std::shared_ptr<FlightInfo> flight_info(result.ValueOrDie().release());
+
+  std::shared_ptr<arrow::Schema> schema;
+  {
+    auto schema_result = flight_info->GetSchema(nullptr);
+    ThrowIfNotOK(schema_result.status());
+    schema = std::move(schema_result).ValueUnsafe();
+  }
+
+  auto transformer = RecordBatchTransformerWithTasksBuilder(schema)
+                         .RenameField("catalog_name", "TABLE_CAT")
+                         .RenameField("db_schema_name", "TABLE_SCHEM")
+                         .RenameField("table_name", "TABLE_NAME")
+                         .RenameField("column_name", "COLUMN_NAME")
+                         .CastField("key_sequence", "KEY_SEQ", arrow::int16())
+                         .RenameField("key_name", "PK_NAME")
+                         .Build();
 
   current_result_set_ = std::make_shared<FlightSqlResultSet>(
-    sql_client_, call_options_, flight_info, nullptr, diagnostics_, metadata_settings_);
+      sql_client_, call_options_, flight_info, transformer, diagnostics_, metadata_settings_);
 
   return current_result_set_;
 }
@@ -355,31 +385,88 @@ std::shared_ptr<ResultSet> FlightSqlStatement::GetForeignKeys(
     const std::string *fk_schema_name, const std::string *fk_table_name) {
   ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
-  auto schema = arrow::schema({
-    arrow::field("PKTABLE_CAT", arrow::utf8(), true),     // nullable
-    arrow::field("PKTABLE_SCHEM", arrow::utf8(), true),   // nullable
-    arrow::field("PKTABLE_NAME", arrow::utf8(), false),   // not nullable
-    arrow::field("PKCOLUMN_NAME", arrow::utf8(), false),  // not nullable
-    arrow::field("FKTABLE_CAT", arrow::utf8(), true),     // nullable
-    arrow::field("FKTABLE_SCHEM", arrow::utf8(), true),   // nullable
-    arrow::field("FKTABLE_NAME", arrow::utf8(), false),   // not nullable
-    arrow::field("FKCOLUMN_NAME", arrow::utf8(), false),  // not nullable
-    arrow::field("KEY_SEQ", arrow::int16(), false),       // not nullable
-    arrow::field("UPDATE_RULE", arrow::int16(), true),    // nullable
-    arrow::field("DELETE_RULE", arrow::int16(), true),    // nullable
-    arrow::field("FK_NAME", arrow::utf8(), true),         // nullable
-    arrow::field("PK_NAME", arrow::utf8(), true),         // nullable
-    arrow::field("DEFERRABILITY", arrow::int16(), true)   // nullable
-  });
+  const bool have_pk = pk_table_name != nullptr;
+  const bool have_fk = fk_table_name != nullptr;
 
-  auto flight_info_result = arrow::flight::FlightInfo::Make(
-    *schema, arrow::flight::FlightDescriptor::Command(""),
-    std::vector<arrow::flight::FlightEndpoint>(), 0, 0);
-  ThrowIfNotOK(flight_info_result.status());
-  auto flight_info = std::make_shared<arrow::flight::FlightInfo>(std::move(flight_info_result.ValueOrDie()));
+  if (!have_pk && !have_fk) {
+    // Neither table specified — return empty result set (no RPC to call).
+    auto fk_empty_schema = arrow::schema({
+      arrow::field("PKTABLE_CAT", arrow::utf8(), true),
+      arrow::field("PKTABLE_SCHEM", arrow::utf8(), true),
+      arrow::field("PKTABLE_NAME", arrow::utf8(), false),
+      arrow::field("PKCOLUMN_NAME", arrow::utf8(), false),
+      arrow::field("FKTABLE_CAT", arrow::utf8(), true),
+      arrow::field("FKTABLE_SCHEM", arrow::utf8(), true),
+      arrow::field("FKTABLE_NAME", arrow::utf8(), false),
+      arrow::field("FKCOLUMN_NAME", arrow::utf8(), false),
+      arrow::field("KEY_SEQ", arrow::int16(), false),
+      arrow::field("UPDATE_RULE", arrow::int16(), true),
+      arrow::field("DELETE_RULE", arrow::int16(), true),
+      arrow::field("FK_NAME", arrow::utf8(), true),
+      arrow::field("PK_NAME", arrow::utf8(), true),
+      arrow::field("DEFERRABILITY", arrow::int16(), true)
+    });
+    auto fk_fi = arrow::flight::FlightInfo::Make(
+        *fk_empty_schema, arrow::flight::FlightDescriptor::Command(""),
+        std::vector<arrow::flight::FlightEndpoint>(), 0, 0);
+    ThrowIfNotOK(fk_fi.status());
+    auto flight_info = std::make_shared<arrow::flight::FlightInfo>(
+        std::move(fk_fi.ValueOrDie()));
+
+    current_result_set_ = std::make_shared<FlightSqlResultSet>(
+        sql_client_, call_options_, flight_info, nullptr, diagnostics_, metadata_settings_);
+    return current_result_set_;
+  }
+
+  // Build table refs, stripping ODBC escape characters.
+  arrow::flight::sql::TableRef pk_ref;
+  if (pk_catalog_name) pk_ref.catalog = StripOdbcSearchPatternEscapes(*pk_catalog_name);
+  if (pk_schema_name)  pk_ref.db_schema = StripOdbcSearchPatternEscapes(*pk_schema_name);
+  if (pk_table_name)   pk_ref.table = StripOdbcSearchPatternEscapes(*pk_table_name);
+
+  arrow::flight::sql::TableRef fk_ref;
+  if (fk_catalog_name) fk_ref.catalog = StripOdbcSearchPatternEscapes(*fk_catalog_name);
+  if (fk_schema_name)  fk_ref.db_schema = StripOdbcSearchPatternEscapes(*fk_schema_name);
+  if (fk_table_name)   fk_ref.table = StripOdbcSearchPatternEscapes(*fk_table_name);
+
+  // Route to the appropriate RPC based on which tables are specified.
+  arrow::Result<std::unique_ptr<FlightInfo>> result;
+  if (have_pk && have_fk) {
+    result = sql_client_.GetCrossReference(call_options_, pk_ref, fk_ref);
+  } else if (have_pk) {
+    result = sql_client_.GetExportedKeys(call_options_, pk_ref);
+  } else {
+    result = sql_client_.GetImportedKeys(call_options_, fk_ref);
+  }
+  ThrowIfNotOK(result.status());
+  std::shared_ptr<FlightInfo> flight_info(result.ValueOrDie().release());
+
+  std::shared_ptr<arrow::Schema> schema;
+  {
+    auto schema_result = flight_info->GetSchema(nullptr);
+    ThrowIfNotOK(schema_result.status());
+    schema = std::move(schema_result).ValueUnsafe();
+  }
+
+  auto transformer = RecordBatchTransformerWithTasksBuilder(schema)
+                         .RenameField("pk_catalog_name", "PKTABLE_CAT")
+                         .RenameField("pk_db_schema_name", "PKTABLE_SCHEM")
+                         .RenameField("pk_table_name", "PKTABLE_NAME")
+                         .RenameField("pk_column_name", "PKCOLUMN_NAME")
+                         .RenameField("fk_catalog_name", "FKTABLE_CAT")
+                         .RenameField("fk_db_schema_name", "FKTABLE_SCHEM")
+                         .RenameField("fk_table_name", "FKTABLE_NAME")
+                         .RenameField("fk_column_name", "FKCOLUMN_NAME")
+                         .CastField("key_sequence", "KEY_SEQ", arrow::int16())
+                         .CastField("update_rule", "UPDATE_RULE", arrow::int16())
+                         .CastField("delete_rule", "DELETE_RULE", arrow::int16())
+                         .RenameField("fk_key_name", "FK_NAME")
+                         .RenameField("pk_key_name", "PK_NAME")
+                         .AddFieldOfNulls("DEFERRABILITY", arrow::int16())
+                         .Build();
 
   current_result_set_ = std::make_shared<FlightSqlResultSet>(
-    sql_client_, call_options_, flight_info, nullptr, diagnostics_, metadata_settings_);
+      sql_client_, call_options_, flight_info, transformer, diagnostics_, metadata_settings_);
 
   return current_result_set_;
 }

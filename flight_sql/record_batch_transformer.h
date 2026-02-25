@@ -74,6 +74,17 @@ public:
                      const std::string &transformed_name,
                      const std::unordered_map<std::string, std::string> &replacements);
 
+  /// Based on the original field name, a target field name, and a target Arrow
+  /// data type, prepares a task that casts the column to the new type using
+  /// arrow::compute::Cast.
+  /// \param original_name     The original name of the field.
+  /// \param transformed_name  The name after the transformation.
+  /// \param target_type       The Arrow data type to cast to.
+  RecordBatchTransformerWithTasksBuilder &
+  CastField(const std::string &original_name,
+            const std::string &transformed_name,
+            const std::shared_ptr<DataType> &target_type);
+
   /// It creates an object of RecordBatchTransformerWithTasksBuilder
   /// \return a RecordBatchTransformerWithTasksBuilder object.
   std::shared_ptr<RecordBatchTransformer> Build();

@@ -89,6 +89,10 @@ std::string ConvertSqlPatternToRegexString(const std::string &pattern);
 
 boost::xpressive::sregex ConvertSqlPatternToRegex(const std::string &pattern);
 
+/// Strip ODBC search-pattern escape characters (backslash before _ and %).
+/// E.g. "pk\_test\_orders" -> "pk_test_orders"
+std::string StripOdbcSearchPatternEscapes(const std::string &pattern);
+
 bool NeedArrayConversion(arrow::Type::type original_type_id,
                          odbcabstraction::CDataType data_type);
 

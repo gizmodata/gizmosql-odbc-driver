@@ -7,6 +7,7 @@
 
 #include <odbcabstraction/platform.h>
 #include <arrow/array/array_binary.h>
+#include <arrow/array/array_primitive.h>
 #include <arrow/builder.h>
 #include "arrow/testing/builder.h"
 #include "record_batch_transformer.h"
@@ -182,6 +183,88 @@ TEST(Transformer, TransformerReplaceFieldValuesTest) {
   ASSERT_EQ(result_array->GetString(1), "VIEW");         // unchanged
   ASSERT_EQ(result_array->GetString(2), "TABLE");       // "BASE TABLE" -> "TABLE"
   ASSERT_TRUE(result_array->IsNull(3));                   // null stays null
+}
+
+TEST(Transformer, CastFieldInt32ToInt16) {
+  std::vector<int32_t> values = {1, 2, 3};
+  std::shared_ptr<Array> array;
+  ArrayFromVector<Int32Type, int32_t>(values, &array);
+
+  auto schema = arrow::schema({field("key_sequence", int32())});
+  auto batch = RecordBatch::Make(schema, 3, {array});
+
+  auto transformer = RecordBatchTransformerWithTasksBuilder(schema)
+                         .CastField("key_sequence", "KEY_SEQ", int16())
+                         .Build();
+
+  auto transformed = transformer->Transform(batch);
+
+  // Verify schema
+  ASSERT_EQ(transformed->schema()->num_fields(), 1);
+  ASSERT_EQ(transformed->schema()->field(0)->name(), "KEY_SEQ");
+  ASSERT_EQ(transformed->schema()->field(0)->type()->id(), Type::INT16);
+
+  // Verify values
+  auto result = std::static_pointer_cast<Int16Array>(
+      transformed->GetColumnByName("KEY_SEQ"));
+  ASSERT_EQ(result->length(), 3);
+  ASSERT_EQ(result->Value(0), 1);
+  ASSERT_EQ(result->Value(1), 2);
+  ASSERT_EQ(result->Value(2), 3);
+}
+
+TEST(Transformer, CastFieldUInt8ToInt16) {
+  // Simulates FK update_rule/delete_rule cast (server returns uint8, ODBC expects int16)
+  auto builder = std::make_shared<UInt8Builder>();
+  ASSERT_TRUE(builder->Append(0).ok());   // CASCADE
+  ASSERT_TRUE(builder->Append(1).ok());   // RESTRICT
+  ASSERT_TRUE(builder->Append(3).ok());   // SET NULL
+
+  std::shared_ptr<Array> array;
+  ASSERT_TRUE(builder->Finish(&array).ok());
+
+  auto schema = arrow::schema({field("update_rule", uint8())});
+  auto batch = RecordBatch::Make(schema, 3, {array});
+
+  auto transformer = RecordBatchTransformerWithTasksBuilder(schema)
+                         .CastField("update_rule", "UPDATE_RULE", int16())
+                         .Build();
+
+  auto transformed = transformer->Transform(batch);
+
+  ASSERT_EQ(transformed->schema()->field(0)->type()->id(), Type::INT16);
+
+  auto result = std::static_pointer_cast<Int16Array>(
+      transformed->GetColumnByName("UPDATE_RULE"));
+  ASSERT_EQ(result->Value(0), 0);
+  ASSERT_EQ(result->Value(1), 1);
+  ASSERT_EQ(result->Value(2), 3);
+}
+
+TEST(Transformer, CastFieldPreservesNulls) {
+  auto builder = std::make_shared<Int32Builder>();
+  ASSERT_TRUE(builder->Append(10).ok());
+  ASSERT_TRUE(builder->AppendNull().ok());
+  ASSERT_TRUE(builder->Append(30).ok());
+
+  std::shared_ptr<Array> array;
+  ASSERT_TRUE(builder->Finish(&array).ok());
+
+  auto schema = arrow::schema({field("value", int32())});
+  auto batch = RecordBatch::Make(schema, 3, {array});
+
+  auto transformer = RecordBatchTransformerWithTasksBuilder(schema)
+                         .CastField("value", "VALUE", int16())
+                         .Build();
+
+  auto transformed = transformer->Transform(batch);
+
+  auto result = std::static_pointer_cast<Int16Array>(
+      transformed->GetColumnByName("VALUE"));
+  ASSERT_EQ(result->length(), 3);
+  ASSERT_EQ(result->Value(0), 10);
+  ASSERT_TRUE(result->IsNull(1));
+  ASSERT_EQ(result->Value(2), 30);
 }
 
 } // namespace flight_sql

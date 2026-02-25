@@ -6,8 +6,9 @@
  *   2. GetDbSchemas      — SQLTables("", SQL_ALL_SCHEMAS, "", NULL)
  *   3. GetTableTypes     — SQLTables("", "", "", SQL_ALL_TABLE_TYPES)
  *   4. GetTables (generic) — SQLTables(NULL, NULL, NULL, NULL)
- * Plus filtered SQLTables variants, SQLColumns, and parameterized queries
- * (SQLPrepare/SQLBindParameter/SQLExecute).
+ * Plus filtered SQLTables variants, SQLColumns, parameterized queries
+ * (SQLPrepare/SQLBindParameter/SQLExecute), and primary/foreign key
+ * discovery (SQLPrimaryKeys/SQLForeignKeys).
  *
  * Compile: gcc -o test_metadata test_metadata.c -lodbc
  * Requires: unixODBC, GizmoSQL server on localhost:31337
@@ -16,7 +17,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#define strcasecmp _stricmp
+#else
 #include <strings.h>
+#endif
 #include <sql.h>
 #include <sqlext.h>
 
@@ -747,6 +753,199 @@ static int test_parameterized_query_limit(SQLHSTMT hStmt) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Test: SQLPrimaryKeys
+ *   Verifies that SQLPrimaryKeys returns the correct primary key column
+ *   for a table with a PRIMARY KEY constraint.
+ * ------------------------------------------------------------------------ */
+static int test_primary_keys(SQLHSTMT hStmt) {
+  printf("\n--- Test: SQLPrimaryKeys for pk_test_customers ---\n");
+
+  SQLRETURN rc = SQLPrimaryKeys(hStmt, NULL, 0, NULL, 0,
+                                 (SQLCHAR *)"pk_test_customers", SQL_NTS);
+  CHECK(rc, "SQLPrimaryKeys(pk_test_customers)");
+
+  SQLCHAR table_cat[MAX_COL_LEN], table_schem[MAX_COL_LEN];
+  SQLCHAR table_name[MAX_COL_LEN], column_name[MAX_COL_LEN];
+  SQLCHAR pk_name[MAX_COL_LEN];
+  SQLSMALLINT key_seq;
+  SQLLEN ind[6];
+
+  SQLBindCol(hStmt, 1, SQL_C_CHAR, table_cat, sizeof(table_cat), &ind[0]);
+  SQLBindCol(hStmt, 2, SQL_C_CHAR, table_schem, sizeof(table_schem), &ind[1]);
+  SQLBindCol(hStmt, 3, SQL_C_CHAR, table_name, sizeof(table_name), &ind[2]);
+  SQLBindCol(hStmt, 4, SQL_C_CHAR, column_name, sizeof(column_name), &ind[3]);
+  SQLBindCol(hStmt, 5, SQL_C_SSHORT, &key_seq, 0, &ind[4]);
+  SQLBindCol(hStmt, 6, SQL_C_CHAR, pk_name, sizeof(pk_name), &ind[5]);
+
+  int count = 0;
+  int found_customer_id = 0;
+  while (SQLFetch(hStmt) == SQL_SUCCESS) {
+    printf("  TABLE_CAT=%s TABLE_SCHEM=%s TABLE_NAME=%s COLUMN_NAME=%s KEY_SEQ=%d PK_NAME=%s\n",
+           ind[0] == SQL_NULL_DATA ? "(null)" : (char *)table_cat,
+           ind[1] == SQL_NULL_DATA ? "(null)" : (char *)table_schem,
+           (char *)table_name, (char *)column_name, (int)key_seq,
+           ind[5] == SQL_NULL_DATA ? "(null)" : (char *)pk_name);
+    count++;
+
+    if (strcasecmp((char *)column_name, "customer_id") == 0 && key_seq == 1) {
+      found_customer_id = 1;
+    }
+  }
+
+  printf("  Total rows: %d\n", count);
+
+  if (count < 1) {
+    fprintf(stderr, "FAIL: expected >= 1 primary key row, got %d\n", count);
+    reset_stmt(hStmt);
+    return 1;
+  }
+  if (!found_customer_id) {
+    fprintf(stderr, "FAIL: customer_id with KEY_SEQ=1 not found\n");
+    reset_stmt(hStmt);
+    return 1;
+  }
+
+  printf("  PASS\n");
+  reset_stmt(hStmt);
+  return 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Test: SQLForeignKeys (imported keys)
+ *   Verifies that SQLForeignKeys returns the FK relationship when called
+ *   with only the FK table specified (GetImportedKeys path).
+ * ------------------------------------------------------------------------ */
+static int test_foreign_keys_imported(SQLHSTMT hStmt) {
+  printf("\n--- Test: SQLForeignKeys (imported keys for pk_test_orders) ---\n");
+
+  SQLRETURN rc = SQLForeignKeys(hStmt,
+                                 NULL, 0, NULL, 0, NULL, 0,     /* PK table: not specified */
+                                 NULL, 0, NULL, 0,               /* FK cat/schema: not specified */
+                                 (SQLCHAR *)"pk_test_orders", SQL_NTS);
+  CHECK(rc, "SQLForeignKeys(imported keys)");
+
+  SQLCHAR pktbl[MAX_COL_LEN], pkcol[MAX_COL_LEN];
+  SQLCHAR fktbl[MAX_COL_LEN], fkcol[MAX_COL_LEN];
+  SQLCHAR fk_name[MAX_COL_LEN], pk_name[MAX_COL_LEN];
+  SQLSMALLINT key_seq, update_rule, delete_rule, deferrability;
+  SQLLEN ind[14];
+
+  SQLBindCol(hStmt, 1, SQL_C_CHAR, NULL, 0, &ind[0]);  /* PKTABLE_CAT */
+  SQLBindCol(hStmt, 2, SQL_C_CHAR, NULL, 0, &ind[1]);  /* PKTABLE_SCHEM */
+  SQLBindCol(hStmt, 3, SQL_C_CHAR, pktbl, sizeof(pktbl), &ind[2]);
+  SQLBindCol(hStmt, 4, SQL_C_CHAR, pkcol, sizeof(pkcol), &ind[3]);
+  SQLBindCol(hStmt, 5, SQL_C_CHAR, NULL, 0, &ind[4]);  /* FKTABLE_CAT */
+  SQLBindCol(hStmt, 6, SQL_C_CHAR, NULL, 0, &ind[5]);  /* FKTABLE_SCHEM */
+  SQLBindCol(hStmt, 7, SQL_C_CHAR, fktbl, sizeof(fktbl), &ind[6]);
+  SQLBindCol(hStmt, 8, SQL_C_CHAR, fkcol, sizeof(fkcol), &ind[7]);
+  SQLBindCol(hStmt, 9, SQL_C_SSHORT, &key_seq, 0, &ind[8]);
+  SQLBindCol(hStmt, 10, SQL_C_SSHORT, &update_rule, 0, &ind[9]);
+  SQLBindCol(hStmt, 11, SQL_C_SSHORT, &delete_rule, 0, &ind[10]);
+  SQLBindCol(hStmt, 12, SQL_C_CHAR, fk_name, sizeof(fk_name), &ind[11]);
+  SQLBindCol(hStmt, 13, SQL_C_CHAR, pk_name, sizeof(pk_name), &ind[12]);
+  SQLBindCol(hStmt, 14, SQL_C_SSHORT, &deferrability, 0, &ind[13]);
+
+  int count = 0;
+  int found_fk = 0;
+  while (SQLFetch(hStmt) == SQL_SUCCESS) {
+    printf("  PK: %s.%s -> FK: %s.%s  KEY_SEQ=%d UPDATE_RULE=%d DELETE_RULE=%d\n",
+           (char *)pktbl, (char *)pkcol,
+           (char *)fktbl, (char *)fkcol,
+           (int)key_seq,
+           ind[9] == SQL_NULL_DATA ? -1 : (int)update_rule,
+           ind[10] == SQL_NULL_DATA ? -1 : (int)delete_rule);
+    count++;
+
+    /* Verify the expected FK relationship */
+    if (strcasecmp((char *)pktbl, "pk_test_customers") == 0 &&
+        strcasecmp((char *)pkcol, "customer_id") == 0 &&
+        strcasecmp((char *)fktbl, "pk_test_orders") == 0 &&
+        strcasecmp((char *)fkcol, "customer_id") == 0 &&
+        key_seq == 1) {
+      found_fk = 1;
+    }
+  }
+
+  printf("  Total rows: %d\n", count);
+
+  if (count < 1) {
+    fprintf(stderr, "FAIL: expected >= 1 foreign key row, got %d\n", count);
+    reset_stmt(hStmt);
+    return 1;
+  }
+  if (!found_fk) {
+    fprintf(stderr, "FAIL: expected FK pk_test_orders.customer_id -> pk_test_customers.customer_id not found\n");
+    reset_stmt(hStmt);
+    return 1;
+  }
+
+  printf("  PASS\n");
+  reset_stmt(hStmt);
+  return 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Test: SQLForeignKeys (exported keys)
+ *   Verifies that SQLForeignKeys returns the FK relationship when called
+ *   with only the PK table specified (GetExportedKeys path).
+ * ------------------------------------------------------------------------ */
+static int test_foreign_keys_exported(SQLHSTMT hStmt) {
+  printf("\n--- Test: SQLForeignKeys (exported keys for pk_test_customers) ---\n");
+
+  SQLRETURN rc = SQLForeignKeys(hStmt,
+                                 NULL, 0, NULL, 0,
+                                 (SQLCHAR *)"pk_test_customers", SQL_NTS,
+                                 NULL, 0, NULL, 0, NULL, 0);
+  CHECK(rc, "SQLForeignKeys(exported keys)");
+
+  SQLCHAR pktbl[MAX_COL_LEN], pkcol[MAX_COL_LEN];
+  SQLCHAR fktbl[MAX_COL_LEN], fkcol[MAX_COL_LEN];
+  SQLSMALLINT key_seq;
+  SQLLEN ind[9];
+
+  SQLBindCol(hStmt, 3, SQL_C_CHAR, pktbl, sizeof(pktbl), &ind[0]);
+  SQLBindCol(hStmt, 4, SQL_C_CHAR, pkcol, sizeof(pkcol), &ind[1]);
+  SQLBindCol(hStmt, 7, SQL_C_CHAR, fktbl, sizeof(fktbl), &ind[2]);
+  SQLBindCol(hStmt, 8, SQL_C_CHAR, fkcol, sizeof(fkcol), &ind[3]);
+  SQLBindCol(hStmt, 9, SQL_C_SSHORT, &key_seq, 0, &ind[4]);
+
+  int count = 0;
+  int found_fk = 0;
+  while (SQLFetch(hStmt) == SQL_SUCCESS) {
+    printf("  PK: %s.%s -> FK: %s.%s  KEY_SEQ=%d\n",
+           (char *)pktbl, (char *)pkcol,
+           (char *)fktbl, (char *)fkcol,
+           (int)key_seq);
+    count++;
+
+    if (strcasecmp((char *)pktbl, "pk_test_customers") == 0 &&
+        strcasecmp((char *)pkcol, "customer_id") == 0 &&
+        strcasecmp((char *)fktbl, "pk_test_orders") == 0 &&
+        strcasecmp((char *)fkcol, "customer_id") == 0 &&
+        key_seq == 1) {
+      found_fk = 1;
+    }
+  }
+
+  printf("  Total rows: %d\n", count);
+
+  if (count < 1) {
+    fprintf(stderr, "FAIL: expected >= 1 exported key row, got %d\n", count);
+    reset_stmt(hStmt);
+    return 1;
+  }
+  if (!found_fk) {
+    fprintf(stderr, "FAIL: expected exported FK pk_test_customers -> pk_test_orders not found\n");
+    reset_stmt(hStmt);
+    return 1;
+  }
+
+  printf("  PASS\n");
+  reset_stmt(hStmt);
+  return 0;
+}
+
+/* ---------------------------------------------------------------------------
  * Main
  * ------------------------------------------------------------------------ */
 int main(void) {
@@ -822,6 +1021,23 @@ int main(void) {
       printf("  CREATE TABLE in test_catalog failed — skipping multi-catalog tests\n");
     }
   }
+
+  /* --- Setup: create PK/FK test tables --- */
+  printf("Setup: creating pk_test_customers and pk_test_orders...\n");
+  exec_ignore(hStmt, "DROP TABLE IF EXISTS pk_test_orders");
+  exec_ignore(hStmt, "DROP TABLE IF EXISTS pk_test_customers");
+  if (exec_required(hStmt,
+        "CREATE TABLE pk_test_customers "
+        "(customer_id INTEGER PRIMARY KEY, name VARCHAR(100) NOT NULL)")) return 1;
+  if (exec_required(hStmt,
+        "CREATE TABLE pk_test_orders "
+        "(order_id INTEGER PRIMARY KEY, "
+        "customer_id INTEGER NOT NULL REFERENCES pk_test_customers(customer_id), "
+        "amount DECIMAL(10,2))")) return 1;
+  if (exec_required(hStmt,
+        "INSERT INTO pk_test_customers VALUES (1, 'Alice'), (2, 'Bob')")) return 1;
+  if (exec_required(hStmt,
+        "INSERT INTO pk_test_orders VALUES (100, 1, 49.99), (101, 2, 19.99)")) return 1;
 
   /* --- Run tests --- */
 
@@ -916,7 +1132,30 @@ int main(void) {
     g_passed++;
   }
 
+  /* Test 13: SQLPrimaryKeys */
+  if (test_primary_keys(hStmt)) {
+    g_failed++;
+  } else {
+    g_passed++;
+  }
+
+  /* Test 14: SQLForeignKeys (imported keys) */
+  if (test_foreign_keys_imported(hStmt)) {
+    g_failed++;
+  } else {
+    g_passed++;
+  }
+
+  /* Test 15: SQLForeignKeys (exported keys) */
+  if (test_foreign_keys_exported(hStmt)) {
+    g_failed++;
+  } else {
+    g_passed++;
+  }
+
   /* --- Cleanup --- */
+  exec_ignore(hStmt, "DROP TABLE IF EXISTS pk_test_orders");
+  exec_ignore(hStmt, "DROP TABLE IF EXISTS pk_test_customers");
   exec_ignore(hStmt, "DROP VIEW IF EXISTS v_customer_summary");
   if (multi_catalog) {
     exec_ignore(hStmt, "DROP TABLE IF EXISTS test_catalog.main.test_extra");
