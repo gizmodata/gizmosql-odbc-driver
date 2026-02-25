@@ -14,7 +14,7 @@ Key features:
 - TLS/SSL encryption with system trust store support
 - Basic, token, and OAuth authentication
 - HTTP/2 keepalive ping frames for long-running connections
-- Cross-platform: macOS (arm64), Linux (x64/arm64), Windows (x64/arm64)
+- Cross-platform: macOS (arm64), Linux (x64/arm64), Windows (x64)
 
 ## Installation
 
@@ -88,14 +88,13 @@ useEncryption = true
 # disableCertificateVerification = true
 ```
 
-### Windows (x64 / arm64)
+### Windows (x64)
 
 #### Installer (recommended)
 
-Download the MSI installer for your architecture from the [latest release](https://github.com/gizmodata/gizmosql-odbc-driver/releases):
+Download the MSI installer from the [latest release](https://github.com/gizmodata/gizmosql-odbc-driver/releases):
 
 - `GizmoSQL-ODBC-Driver-x64.msi` for 64-bit Intel/AMD
-- `GizmoSQL-ODBC-Driver-arm64.msi` for ARM64
 
 The installer registers the ODBC driver automatically. After installation, use the ODBC Data Source Administrator (`odbcad32.exe`) to create a DSN.
 
