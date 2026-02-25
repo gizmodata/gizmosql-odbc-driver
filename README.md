@@ -11,6 +11,7 @@ The GizmoSQL ODBC Driver enables BI tools, applications, and languages with ODBC
 
 Key features:
 - Full ODBC 3.x compliance
+- Power BI DirectQuery and Import mode support (via the [GizmoSQL Power BI Connector](https://github.com/gizmodata/gizmosql-powerbi-connector))
 - TLS/SSL encryption with system trust store support
 - Basic, token, and OAuth authentication
 - HTTP/2 keepalive ping frames for long-running connections
@@ -182,19 +183,19 @@ Driver=GizmoSQL ODBC Driver;host=gizmosql.example.com;port=443;token=eyJhbGci...
 ### Prerequisites
 
 - CMake 3.11+
-- C++11 compatible compiler
+- C++17 compatible compiler
 - Boost
-- gRPC 1.36+
-- Protocol Buffers (protobuf)
 - OpenSSL
 - RapidJSON
 - ODBC development headers (iODBC on macOS, unixODBC or iODBC on Linux)
+
+Arrow Flight SQL, gRPC, and Protobuf are built automatically as a CMake ExternalProject — no separate installation needed.
 
 ### macOS
 
 ```bash
 # Install dependencies
-brew install cmake boost libiodbc grpc protobuf openssl@3 rapidjson
+brew install cmake boost libiodbc openssl@3 rapidjson
 
 # Build
 mkdir build && cd build
@@ -207,7 +208,6 @@ cmake --build . --parallel
 ```bash
 # Install dependencies (Debian/Ubuntu)
 sudo apt-get install -y cmake libboost-all-dev libiodbc2-dev \
-    libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc \
     libssl-dev rapidjson-dev
 
 # Build
