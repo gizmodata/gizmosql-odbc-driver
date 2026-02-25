@@ -4,11 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v1.0.0] - 2026-02-25
+
 ### Fixed
+- Fix Power BI DirectQuery "UNSEARCHABLE" folding failure: `GetTypeName()` returned empty string when the Flight SQL server did not provide `ARROW:FLIGHT:SQL:TYPE_NAME` column metadata. Power BI's Mashup engine matches each column's `SQL_DESC_TYPE_NAME` (from `SQLColAttributeW`) against `TYPE_NAME` in `SQLGetTypeInfo` to determine searchability — an empty string matched nothing, causing all columns to be treated as UNSEARCHABLE and preventing query folding. The driver now falls back to computing the type name from the Arrow field's SQL data type (e.g., "WVARCHAR", "INTEGER").
+- Fix `SQLGetTypeInfo` TYPE_NAME / DATA_TYPE inconsistency on Windows: `EnsureRightSqlCharType` remapped `DATA_TYPE` from `VARCHAR` to `WVARCHAR` but left `TYPE_NAME` as the raw server string "VARCHAR", creating a mismatch. TYPE_NAME is now updated to match the remapped data type.
+- Fix `SQLColAttribute`/`SQLColAttributeW` sign extension for `numericAttr`: negative SQL data type codes (e.g., `SQL_WVARCHAR = -9`) were returned as unsigned values (65527) because the driver copied raw bytes into `SQLLEN` without sign-extending from `SQLSMALLINT`. Values are now properly sign-extended based on their actual size.
 - Fix `SetParameters()` not handling `SQL_C_LONG` (type 4) and `SQL_C_SHORT` (type 5) C types for numeric Arrow types. pyodbc and other ODBC clients may send integer parameters as `SQL_C_LONG` (the generic/undecorated form) rather than `SQL_C_SLONG` (the explicitly signed form), causing "Cannot convert C type 4 to Arrow int64" errors on parameterized queries.
 - Fix `SetParameters()` not handling `SQL_C_WCHAR` for numeric Arrow types. Power BI DirectQuery uses W (wide-char) ODBC functions and sends parameter values as wide strings; the driver now converts SQL_C_WCHAR to UTF-8 before parsing for all supported Arrow types (int16/32/64, float32/64, boolean, date32, timestamp, utf8).
 
-## [v1.0.0] - 2026-02-24
+### Changed
+- `IsSearchable()` now always returns `SEARCHABILITY_ALL` for all column types and all types in `SQLGetTypeInfo`, since DuckDB supports WHERE, GROUP BY, and ORDER BY on all types. Previously, the driver relied on Flight SQL metadata which often defaulted to unsearchable.
+- `GetLocalTypeName()` now falls back to computing the type name from the Arrow field type, matching the `GetTypeName()` fix.
+
+### Added
+- Optional ODBC trace logging to `C:\odbc_trace.log`, enabled by setting environment variable `GIZMOSQL_ODBC_TRACE=1`. Logs all major ODBC function calls with parameters and return values for debugging Power BI and other ODBC client interactions.
+
+## [v1.0.0-rc1] - 2026-02-24
 
 Initial release.
 

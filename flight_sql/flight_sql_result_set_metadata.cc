@@ -164,10 +164,13 @@ std::string FlightSqlResultSetMetadata::GetLiteralSuffix(int column_position) {
 }
 
 std::string FlightSqlResultSetMetadata::GetLocalTypeName(int column_position) {
-  arrow::flight::sql::ColumnMetadata metadata = GetMetadata(schema_->field(column_position - 1));
+  const std::shared_ptr<Field> &field = schema_->field(column_position - 1);
+  arrow::flight::sql::ColumnMetadata metadata = GetMetadata(field);
 
-  // TODO: Is local type name the same as type name?
-  return metadata.GetTypeName().ValueOrElse([] { return ""; });
+  return metadata.GetTypeName().ValueOrElse([&] {
+    SqlDataType data_type = GetDataTypeFromArrowField_V3(field, metadata_settings_.use_wide_char_);
+    return GetTypeNameFromSqlDataType(static_cast<int16_t>(data_type));
+  });
 }
 
 size_t FlightSqlResultSetMetadata::GetNumPrecRadix(int column_position) {
@@ -196,9 +199,17 @@ size_t FlightSqlResultSetMetadata::GetOctetLength(int column_position) {
 }
 
 std::string FlightSqlResultSetMetadata::GetTypeName(int column_position) {
-  arrow::flight::sql::ColumnMetadata metadata = GetMetadata(schema_->field(column_position - 1));
+  const std::shared_ptr<Field> &field = schema_->field(column_position - 1);
+  arrow::flight::sql::ColumnMetadata metadata = GetMetadata(field);
 
-  return metadata.GetTypeName().ValueOrElse([] { return ""; });
+  return metadata.GetTypeName().ValueOrElse([&] {
+    // Fall back to computing the type name from the Arrow field's SqlDataType
+    // when the server does not provide ARROW:FLIGHT:SQL:TYPE_NAME metadata.
+    // Power BI matches this value against SQLGetTypeInfo's TYPE_NAME column
+    // to determine column searchability for DirectQuery folding.
+    SqlDataType data_type = GetDataTypeFromArrowField_V3(field, metadata_settings_.use_wide_char_);
+    return GetTypeNameFromSqlDataType(static_cast<int16_t>(data_type));
+  });
 }
 
 driver::odbcabstraction::Updatability
@@ -223,8 +234,10 @@ driver::odbcabstraction::Searchability
 FlightSqlResultSetMetadata::IsSearchable(int column_position) {
   arrow::flight::sql::ColumnMetadata metadata = GetMetadata(schema_->field(column_position - 1));
 
-  bool is_searchable = GetMetadataProperty(metadata, arrow::flight::sql::ColumnMetadata::kIsSearchable).ValueOrElse([] { return false; });
-  return is_searchable ? odbcabstraction::SEARCHABILITY_ALL : odbcabstraction::SEARCHABILITY_NONE;
+  // DuckDB supports WHERE, GROUP BY, and ORDER BY on all column types.
+  // Flight SQL column metadata may omit kIsSearchable (defaults to false),
+  // which causes Power Query to reject columns for query folding.
+  return odbcabstraction::SEARCHABILITY_ALL;
 }
 
 bool FlightSqlResultSetMetadata::IsUnsigned(int column_position) {

@@ -259,6 +259,34 @@ cd build
 ctest --output-on-failure
 ```
 
+## Troubleshooting / ODBC Trace
+
+The driver includes built-in ODBC call tracing for diagnosing issues with Power BI, pyodbc, and other ODBC clients. Tracing is **off by default** and has zero overhead when disabled.
+
+To enable tracing, set the `GIZMOSQL_ODBC_TRACE` environment variable before launching your application:
+
+```cmd
+@rem Windows (cmd)
+set GIZMOSQL_ODBC_TRACE=1
+start "" "C:\Program Files\Microsoft Power BI Desktop\bin\PBIDesktop.exe"
+```
+
+```powershell
+# Windows (PowerShell)
+$env:GIZMOSQL_ODBC_TRACE = "1"
+& "C:\Program Files\Microsoft Power BI Desktop\bin\PBIDesktop.exe"
+```
+
+```bash
+# macOS / Linux
+export GIZMOSQL_ODBC_TRACE=1
+python my_script.py
+```
+
+Trace output is written to `C:\odbc_trace.log` (Windows). Each entry includes a timestamp and logs function name, parameters, and return values for all major ODBC calls (`SQLDriverConnectW`, `SQLExecDirectW`, `SQLFetch`, `SQLGetData`, `SQLColAttributeW`, `SQLGetTypeInfo`, `SQLColumnsW`, `SQLTablesW`, `SQLBindParameter`, etc.).
+
+To disable tracing, unset the variable or set it to any value other than `1`.
+
 ## Logging
 
 The driver reads logging configuration from `gizmosql-odbc.ini`, located in the same directory as the driver library.

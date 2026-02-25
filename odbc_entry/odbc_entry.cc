@@ -25,12 +25,50 @@
 #include <odbcabstraction/exceptions.h>
 
 #include <cstring>
+#include <cstdio>
+#include <cstdarg>
 #include <memory>
 #include <string>
 #include <vector>
+#include <mutex>
 
 using namespace ODBC;
 using namespace driver::odbcabstraction;
+
+// ============================================================================
+// Trace logging — writes to C:\odbc_trace.log
+// Enabled by setting environment variable GIZMOSQL_ODBC_TRACE=1
+// ============================================================================
+static std::mutex g_trace_mutex;
+static int g_trace_enabled = -1; // -1 = not yet checked
+
+static bool IsTraceEnabled() {
+  if (g_trace_enabled < 0) {
+    const char *env = getenv("GIZMOSQL_ODBC_TRACE");
+    g_trace_enabled = (env && env[0] == '1') ? 1 : 0;
+  }
+  return g_trace_enabled == 1;
+}
+
+static void TraceLog(const char *fmt, ...) {
+  if (!IsTraceEnabled()) return;
+  std::lock_guard<std::mutex> lock(g_trace_mutex);
+  FILE *f = fopen("C:\\odbc_trace.log", "a");
+  if (!f) return;
+  // Timestamp
+  SYSTEMTIME st;
+  GetLocalTime(&st);
+  fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d.%03d  ",
+          st.wYear, st.wMonth, st.wDay,
+          st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+  va_list ap;
+  va_start(ap, fmt);
+  vfprintf(f, fmt, ap);
+  va_end(ap);
+  fprintf(f, "\n");
+  fflush(f);
+  fclose(f);
+}
 
 // ============================================================================
 // Unicode conversion helpers
@@ -450,10 +488,12 @@ SQLRETURN SQL_API SQLDriverConnectW(SQLHDBC hDbc, SQLHWND hWnd,
                                    SQLSMALLINT connStrOutMax,
                                    SQLSMALLINT *connStrOutLen,
                                    SQLUSMALLINT driverCompletion) {
-  return ODBCConnection::ExecuteWithDiagnostics(
+  TraceLog(">> SQLDriverConnectW hDbc=%p", hDbc);
+  SQLRETURN rc = ODBCConnection::ExecuteWithDiagnostics(
       hDbc, SQL_SUCCESS, [&]() {
         auto *conn = ODBCConnection::of(hDbc);
         std::string connStr = SqlWCharToString(connStrIn, connStrInLen);
+        TraceLog("   connStr=%s", connStr.c_str());
 
         Connection::ConnPropertyMap properties;
         std::string dsn =
@@ -474,6 +514,8 @@ SQLRETURN SQL_API SQLDriverConnectW(SQLHDBC hDbc, SQLHWND hWnd,
 
         return SQL_SUCCESS;
       });
+  TraceLog("<< SQLDriverConnectW -> %d", rc);
+  return rc;
 }
 
 SQLRETURN SQL_API SQLConnect(SQLHDBC hDbc, SQLCHAR *serverName,
@@ -548,12 +590,15 @@ SQLRETURN SQL_API SQLBrowseConnectW(SQLHDBC hDbc, SQLWCHAR *connStrIn,
 }
 
 SQLRETURN SQL_API SQLDisconnect(SQLHDBC hDbc) {
-  return ODBCConnection::ExecuteWithDiagnostics(
+  TraceLog(">> SQLDisconnect hDbc=%p", hDbc);
+  SQLRETURN rc = ODBCConnection::ExecuteWithDiagnostics(
       hDbc, SQL_SUCCESS,
       [&]() {
         ODBCConnection::of(hDbc)->disconnect();
         return SQL_SUCCESS;
       });
+  TraceLog("<< SQLDisconnect -> %d", rc);
+  return rc;
 }
 
 SQLRETURN SQL_API SQLGetInfo(SQLHDBC hDbc, SQLUSMALLINT infoType,
@@ -626,6 +671,7 @@ SQLRETURN SQL_API SQLGetConnectAttrW(SQLHDBC hDbc, SQLINTEGER attribute,
 
 SQLRETURN SQL_API SQLGetFunctions(SQLHDBC hDbc, SQLUSMALLINT functionId,
                                  SQLUSMALLINT *supported) {
+  TraceLog(">> SQLGetFunctions hDbc=%p functionId=%d", hDbc, functionId);
   return ODBCConnection::ExecuteWithDiagnostics(
       hDbc, SQL_SUCCESS, [&]() {
         if (functionId == SQL_API_ODBC3_ALL_FUNCTIONS) {
@@ -695,6 +741,7 @@ SQLRETURN SQL_API SQLNativeSqlW(SQLHDBC hDbc, SQLWCHAR *inSql,
       hDbc, SQL_SUCCESS, [&]() {
         std::string sql = SqlWCharToString(
             inSql, inSqlLen == SQL_NTS ? SQL_NTS : static_cast<SQLSMALLINT>(inSqlLen));
+        TraceLog(">> SQLNativeSqlW sql=[%s]", sql.c_str());
         if (outSql && outSqlMax > 0) {
           SQLSMALLINT bytesWritten = 0;
           Utf8ToSqlWChar(sql, outSql,
@@ -725,21 +772,27 @@ SQLRETURN SQL_API SQLPrepare(SQLHSTMT hStmt, SQLCHAR *sqlStr,
 
 SQLRETURN SQL_API SQLPrepareW(SQLHSTMT hStmt, SQLWCHAR *sqlStr,
                              SQLINTEGER sqlStrLen) {
-  return ODBCStatement::ExecuteWithDiagnostics(
+  std::string sqlForLog = SqlWCharToString(
+      sqlStr, sqlStrLen == SQL_NTS ? SQL_NTS : static_cast<SQLSMALLINT>(sqlStrLen));
+  TraceLog(">> SQLPrepareW hStmt=%p sql=[%s]", hStmt, sqlForLog.c_str());
+  SQLRETURN rc = ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
-        std::string sql = SqlWCharToString(
-            sqlStr, sqlStrLen == SQL_NTS ? SQL_NTS : static_cast<SQLSMALLINT>(sqlStrLen));
-        ODBCStatement::of(hStmt)->Prepare(sql);
+        ODBCStatement::of(hStmt)->Prepare(sqlForLog);
         return SQL_SUCCESS;
       });
+  TraceLog("<< SQLPrepareW -> %d", rc);
+  return rc;
 }
 
 SQLRETURN SQL_API SQLExecute(SQLHSTMT hStmt) {
-  return ODBCStatement::ExecuteWithDiagnostics(
+  TraceLog(">> SQLExecute hStmt=%p", hStmt);
+  SQLRETURN rc = ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
         ODBCStatement::of(hStmt)->ExecutePrepared();
         return SQL_SUCCESS;
       });
+  TraceLog("<< SQLExecute -> %d", rc);
+  return rc;
 }
 
 SQLRETURN SQL_API SQLExecDirect(SQLHSTMT hStmt, SQLCHAR *sqlStr,
@@ -755,13 +808,16 @@ SQLRETURN SQL_API SQLExecDirect(SQLHSTMT hStmt, SQLCHAR *sqlStr,
 
 SQLRETURN SQL_API SQLExecDirectW(SQLHSTMT hStmt, SQLWCHAR *sqlStr,
                                 SQLINTEGER sqlStrLen) {
-  return ODBCStatement::ExecuteWithDiagnostics(
+  std::string sqlForLog = SqlWCharToString(
+      sqlStr, sqlStrLen == SQL_NTS ? SQL_NTS : static_cast<SQLSMALLINT>(sqlStrLen));
+  TraceLog(">> SQLExecDirectW hStmt=%p sql=[%s]", hStmt, sqlForLog.c_str());
+  SQLRETURN rc = ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
-        std::string sql = SqlWCharToString(
-            sqlStr, sqlStrLen == SQL_NTS ? SQL_NTS : static_cast<SQLSMALLINT>(sqlStrLen));
-        ODBCStatement::of(hStmt)->ExecuteDirect(sql);
+        ODBCStatement::of(hStmt)->ExecuteDirect(sqlForLog);
         return SQL_SUCCESS;
       });
+  TraceLog("<< SQLExecDirectW -> %d", rc);
+  return rc;
 }
 
 SQLRETURN SQL_API SQLCancel(SQLHSTMT hStmt) {
@@ -777,12 +833,16 @@ SQLRETURN SQL_API SQLCancel(SQLHSTMT hStmt) {
 // ============================================================================
 
 SQLRETURN SQL_API SQLFetch(SQLHSTMT hStmt) {
-  return ODBCStatement::ExecuteWithDiagnostics(
+  TraceLog(">> SQLFetch hStmt=%p", (void*)hStmt);
+  SQLRETURN rc = ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
         auto *stmt = ODBCStatement::of(hStmt);
         bool hasData = stmt->Fetch(stmt->GetARD()->GetArraySize());
         return hasData ? SQL_SUCCESS : SQL_NO_DATA;
       });
+  TraceLog("<< SQLFetch hStmt=%p -> %d%s", (void*)hStmt, (int)rc,
+           rc == SQL_NO_DATA ? " (NO_DATA)" : rc == SQL_SUCCESS ? " (OK)" : "");
+  return rc;
 }
 
 SQLRETURN SQL_API SQLFetchScroll(SQLHSTMT hStmt, SQLSMALLINT orientation,
@@ -816,23 +876,41 @@ SQLRETURN SQL_API SQLExtendedFetch(SQLHSTMT hStmt, SQLUSMALLINT orientation,
 SQLRETURN SQL_API SQLGetData(SQLHSTMT hStmt, SQLUSMALLINT colNum,
                             SQLSMALLINT targetType, SQLPOINTER targetValue,
                             SQLLEN bufferLength, SQLLEN *strLenOrInd) {
-  return ODBCStatement::ExecuteWithDiagnostics(
+  TraceLog(">> SQLGetData hStmt=%p col=%d targetType=%d bufLen=%lld",
+           (void*)hStmt, (int)colNum, (int)targetType, (long long)bufferLength);
+  auto ret = ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
         bool hasData = ODBCStatement::of(hStmt)->GetData(
             colNum, targetType, targetValue, bufferLength, strLenOrInd);
         return hasData ? SQL_SUCCESS : SQL_NO_DATA;
       });
+  // Log the returned value for small integer types
+  if (ret == SQL_SUCCESS && targetValue) {
+    if (targetType == SQL_C_SSHORT || targetType == SQL_C_SHORT)
+      TraceLog("<< SQLGetData col=%d val=%d -> %d", (int)colNum, (int)*(SQLSMALLINT*)targetValue, (int)ret);
+    else if (targetType == SQL_C_SLONG || targetType == SQL_C_LONG)
+      TraceLog("<< SQLGetData col=%d val=%ld -> %d", (int)colNum, (long)*(SQLINTEGER*)targetValue, (int)ret);
+    else
+      TraceLog("<< SQLGetData col=%d -> %d", (int)colNum, (int)ret);
+  } else {
+    TraceLog("<< SQLGetData col=%d -> %d", (int)colNum, (int)ret);
+  }
+  return ret;
 }
 
 SQLRETURN SQL_API SQLBindCol(SQLHSTMT hStmt, SQLUSMALLINT colNum,
                             SQLSMALLINT targetType, SQLPOINTER targetValue,
                             SQLLEN bufferLength, SQLLEN *strLenOrInd) {
-  return ODBCStatement::ExecuteWithDiagnostics(
+  TraceLog(">> SQLBindCol hStmt=%p col=%d targetType=%d bufLen=%lld",
+           (void*)hStmt, (int)colNum, (int)targetType, (long long)bufferLength);
+  auto ret = ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
         ODBCStatement::of(hStmt)->GetARD()->BindCol(
             colNum, targetType, targetValue, bufferLength, strLenOrInd);
         return SQL_SUCCESS;
       });
+  TraceLog("<< SQLBindCol col=%d -> %d", (int)colNum, (int)ret);
+  return ret;
 }
 
 SQLRETURN SQL_API SQLNumResultCols(SQLHSTMT hStmt, SQLSMALLINT *colCount) {
@@ -926,7 +1004,17 @@ SQLRETURN SQL_API SQLColAttribute(SQLHSTMT hStmt, SQLUSMALLINT colNum,
         ird->GetField(colNum, fieldId, valuePtr, valueBufLen, &intLen);
         if (stringLength) *stringLength = static_cast<SQLSMALLINT>(intLen);
         if (numericAttr) {
-          *numericAttr = *reinterpret_cast<SQLLEN *>(valuePtr);
+          // Sign-extend smaller integer types to SQLLEN.
+          // GetAttribute writes sizeof(T) bytes (e.g. 2 for SQLSMALLINT),
+          // leaving upper bytes zero.  Negative values like SQL_WVARCHAR (-9)
+          // must be sign-extended so callers see -9, not 65527.
+          if (intLen == sizeof(SQLSMALLINT)) {
+            *numericAttr = static_cast<SQLLEN>(*reinterpret_cast<SQLSMALLINT *>(valuePtr));
+          } else if (intLen == sizeof(SQLINTEGER)) {
+            *numericAttr = static_cast<SQLLEN>(*reinterpret_cast<SQLINTEGER *>(valuePtr));
+          } else {
+            *numericAttr = *reinterpret_cast<SQLLEN *>(valuePtr);
+          }
         }
         return SQL_SUCCESS;
       });
@@ -937,7 +1025,8 @@ SQLRETURN SQL_API SQLColAttributeW(SQLHSTMT hStmt, SQLUSMALLINT colNum,
                                   SQLSMALLINT bufferLength,
                                   SQLSMALLINT *stringLength,
                                   SQLLEN *numericAttr) {
-  return ODBCStatement::ExecuteWithDiagnostics(
+  TraceLog(">> SQLColAttributeW hStmt=%p col=%d fieldId=%d", (void*)hStmt, (int)colNum, (int)fieldId);
+  SQLRETURN rc = ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
         auto *ird = ODBCStatement::of(hStmt)->GetIRD();
         SQLINTEGER intLen = 0;
@@ -952,10 +1041,26 @@ SQLRETURN SQL_API SQLColAttributeW(SQLHSTMT hStmt, SQLUSMALLINT colNum,
         ird->GetField(colNum, fieldId, valuePtr, valueBufLen, &intLen, true);
         if (stringLength) *stringLength = static_cast<SQLSMALLINT>(intLen);
         if (numericAttr) {
-          *numericAttr = *reinterpret_cast<SQLLEN *>(valuePtr);
+          // Sign-extend smaller integer types to SQLLEN (see SQLColAttribute).
+          if (intLen == sizeof(SQLSMALLINT)) {
+            *numericAttr = static_cast<SQLLEN>(*reinterpret_cast<SQLSMALLINT *>(valuePtr));
+          } else if (intLen == sizeof(SQLINTEGER)) {
+            *numericAttr = static_cast<SQLLEN>(*reinterpret_cast<SQLINTEGER *>(valuePtr));
+          } else {
+            *numericAttr = *reinterpret_cast<SQLLEN *>(valuePtr);
+          }
+          TraceLog("<< SQLColAttributeW col=%d fieldId=%d numericAttr=%lld -> %d",
+                   (int)colNum, (int)fieldId, (long long)*numericAttr, (int)SQL_SUCCESS);
+        } else {
+          TraceLog("<< SQLColAttributeW col=%d fieldId=%d (string) -> %d",
+                   (int)colNum, (int)fieldId, (int)SQL_SUCCESS);
         }
         return SQL_SUCCESS;
       });
+  if (rc != SQL_SUCCESS) {
+    TraceLog("<< SQLColAttributeW col=%d fieldId=%d -> %d (ERROR)", (int)colNum, (int)fieldId, (int)rc);
+  }
+  return rc;
 }
 
 SQLRETURN SQL_API SQLRowCount(SQLHSTMT hStmt, SQLLEN *rowCount) {
@@ -1051,7 +1156,8 @@ SQLRETURN SQL_API SQLGetDescFieldW(SQLHDESC hDesc, SQLSMALLINT recNum,
                                   SQLSMALLINT fieldId, SQLPOINTER value,
                                   SQLINTEGER bufferLength,
                                   SQLINTEGER *stringLength) {
-  return ODBCDescriptor::ExecuteWithDiagnostics(
+  TraceLog(">> SQLGetDescFieldW hDesc=%p rec=%d fieldId=%d", (void*)hDesc, (int)recNum, (int)fieldId);
+  SQLRETURN rc = ODBCDescriptor::ExecuteWithDiagnostics(
       hDesc, SQL_SUCCESS, [&]() {
         auto *desc = ODBCDescriptor::of(hDesc);
         if (recNum == 0) {
@@ -1059,8 +1165,18 @@ SQLRETURN SQL_API SQLGetDescFieldW(SQLHDESC hDesc, SQLSMALLINT recNum,
         } else {
           desc->GetField(recNum, fieldId, value, bufferLength, stringLength, true);
         }
+        if (value && recNum > 0) {
+          // Log numeric fields (SQLSMALLINT) for key descriptors
+          SQLSMALLINT shortVal = *reinterpret_cast<SQLSMALLINT*>(value);
+          TraceLog("<< SQLGetDescFieldW rec=%d fieldId=%d shortVal=%d -> 0",
+                   (int)recNum, (int)fieldId, (int)shortVal);
+        }
         return SQL_SUCCESS;
       });
+  if (rc != SQL_SUCCESS) {
+    TraceLog("<< SQLGetDescFieldW rec=%d fieldId=%d -> %d (ERROR)", (int)recNum, (int)fieldId, (int)rc);
+  }
+  return rc;
 }
 
 SQLRETURN SQL_API SQLSetDescField(SQLHDESC hDesc, SQLSMALLINT recNum,
@@ -1208,7 +1324,13 @@ SQLRETURN SQL_API SQLTablesW(SQLHSTMT hStmt, SQLWCHAR *catalog,
                             SQLSMALLINT schemaLen, SQLWCHAR *table,
                             SQLSMALLINT tableLen, SQLWCHAR *tableType,
                             SQLSMALLINT tableTypeLen) {
-  return ODBCStatement::ExecuteWithDiagnostics(
+  TraceLog(">> SQLTablesW hStmt=%p cat=[%s] sch=[%s] tbl=[%s] typ=[%s]",
+           hStmt,
+           catalog ? SqlWCharToString(catalog, catalogLen).c_str() : "NULL",
+           schema ? SqlWCharToString(schema, schemaLen).c_str() : "NULL",
+           table ? SqlWCharToString(table, tableLen).c_str() : "NULL",
+           tableType ? SqlWCharToString(tableType, tableTypeLen).c_str() : "NULL");
+  SQLRETURN rc = ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
         auto cat = ToOptionalStringW(catalog, catalogLen);
         auto sch = ToOptionalStringW(schema, schemaLen);
@@ -1218,6 +1340,8 @@ SQLRETURN SQL_API SQLTablesW(SQLHSTMT hStmt, SQLWCHAR *catalog,
                                              typ.get());
         return SQL_SUCCESS;
       });
+  TraceLog("<< SQLTablesW -> %d", rc);
+  return rc;
 }
 
 SQLRETURN SQL_API SQLColumns(SQLHSTMT hStmt, SQLCHAR *catalog,
@@ -1242,7 +1366,13 @@ SQLRETURN SQL_API SQLColumnsW(SQLHSTMT hStmt, SQLWCHAR *catalog,
                              SQLSMALLINT schemaLen, SQLWCHAR *table,
                              SQLSMALLINT tableLen, SQLWCHAR *column,
                              SQLSMALLINT columnLen) {
-  return ODBCStatement::ExecuteWithDiagnostics(
+  TraceLog(">> SQLColumnsW hStmt=%p cat=[%s] sch=[%s] tbl=[%s] col=[%s]",
+           hStmt,
+           catalog ? SqlWCharToString(catalog, catalogLen).c_str() : "NULL",
+           schema ? SqlWCharToString(schema, schemaLen).c_str() : "NULL",
+           table ? SqlWCharToString(table, tableLen).c_str() : "NULL",
+           column ? SqlWCharToString(column, columnLen).c_str() : "NULL");
+  SQLRETURN rc = ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
         auto cat = ToOptionalStringW(catalog, catalogLen);
         auto sch = ToOptionalStringW(schema, schemaLen);
@@ -1252,14 +1382,19 @@ SQLRETURN SQL_API SQLColumnsW(SQLHSTMT hStmt, SQLWCHAR *catalog,
                                               col.get());
         return SQL_SUCCESS;
       });
+  TraceLog("<< SQLColumnsW -> %d", rc);
+  return rc;
 }
 
 SQLRETURN SQL_API SQLGetTypeInfo(SQLHSTMT hStmt, SQLSMALLINT dataType) {
-  return ODBCStatement::ExecuteWithDiagnostics(
+  TraceLog(">> SQLGetTypeInfo hStmt=%p dataType=%d", (void*)hStmt, (int)dataType);
+  SQLRETURN rc = ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
         ODBCStatement::of(hStmt)->GetTypeInfo(dataType);
         return SQL_SUCCESS;
       });
+  TraceLog("<< SQLGetTypeInfo -> %d", (int)rc);
+  return rc;
 }
 
 SQLRETURN SQL_API SQLGetTypeInfoW(SQLHSTMT hStmt, SQLSMALLINT dataType) {
@@ -1813,7 +1948,9 @@ SQLRETURN SQL_API SQLBindParameter(SQLHSTMT hStmt, SQLUSMALLINT paramNum,
                                   SQLSMALLINT decDigits, SQLPOINTER paramValue,
                                   SQLLEN bufferLength,
                                   SQLLEN *strLenOrInd) {
-  return ODBCStatement::ExecuteWithDiagnostics(
+  TraceLog(">> SQLBindParameter hStmt=%p param#%d cType=%d sqlType=%d colSize=%llu decDigits=%d bufLen=%lld",
+           hStmt, paramNum, valueType, paramType, (unsigned long long)colSize, decDigits, (long long)bufferLength);
+  SQLRETURN rc = ODBCStatement::ExecuteWithDiagnostics(
       hStmt, SQL_SUCCESS, [&]() {
         ODBCStatement* stmt = reinterpret_cast<ODBCStatement*>(hStmt);
         ODBCDescriptor* apd = stmt->GetAPD();
@@ -1852,6 +1989,8 @@ SQLRETURN SQL_API SQLBindParameter(SQLHSTMT hStmt, SQLUSMALLINT paramNum,
 
         return SQL_SUCCESS;
       });
+  TraceLog("<< SQLBindParameter -> %d", rc);
+  return rc;
 }
 
 SQLRETURN SQL_API SQLDescribeParam(SQLHSTMT hStmt, SQLUSMALLINT paramNum,

@@ -65,9 +65,13 @@ When unixODBC DM loads the driver, internal calls between exported ODBC function
 - Run `ctest --test-dir build --output-on-failure` after every change
 
 ## Changelog
-- **Always update `CHANGELOG.md`** when making major changes, new features, bug fixes, or breaking changes
+- **Always update `CHANGELOG.md`** when making changes — bug fixes, new features, behavioral changes, or breaking changes
 - Follow [Keep a Changelog](https://keepachangelog.com/) format
 - Group changes under: Added, Changed, Fixed, Removed
+- New entries go under the `## [Unreleased]` section at the top
+- When tagging a release, rename `[Unreleased]` to the version and date (e.g., `## [v1.1.0] - 2026-02-25`) and add a new empty `[Unreleased]` above it
+- Write entries from the user's perspective — describe the symptom/impact, not just the code change (e.g., "Fix Power BI DirectQuery folding failure" not "Change GetTypeName return value")
+- Include root cause details for non-obvious bug fixes so future maintainers understand the issue
 
 ## Debugging
 

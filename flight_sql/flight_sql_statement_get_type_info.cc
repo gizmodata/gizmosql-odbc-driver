@@ -89,7 +89,15 @@ Transform_inner(const odbcabstraction::OdbcVersion odbc_version,
     data.data_type = odbc_version == odbcabstraction::V_3
                      ? data_type_v3
                      : data_type_v2;
-    data.type_name = reader.GetTypeName();
+    // When EnsureRightSqlCharType remaps the DATA_TYPE (e.g., VARCHAR → WVARCHAR
+    // on Windows), update TYPE_NAME to match so that Power BI can look up the
+    // column's type name (from SQLColAttributeW SQL_DESC_TYPE_NAME) in this table.
+    auto original_data_type = static_cast<odbcabstraction::SqlDataType>(reader.GetDataType());
+    if (data_type_v3 != original_data_type) {
+      data.type_name = GetTypeNameFromSqlDataType(static_cast<int16_t>(data_type_v3));
+    } else {
+      data.type_name = reader.GetTypeName();
+    }
     data.column_size = reader.GetColumnSize();
     data.literal_prefix = reader.GetLiteralPrefix();
     data.literal_suffix = reader.GetLiteralSuffix();
@@ -103,7 +111,10 @@ Transform_inner(const odbcabstraction::OdbcVersion odbc_version,
 
     data.nullable = reader.GetNullable() ? odbcabstraction::NULLABILITY_NULLABLE : odbcabstraction::NULLABILITY_NO_NULLS;
     data.case_sensitive = reader.GetCaseSensitive();
-    data.searchable = reader.GetSearchable() ? odbcabstraction::SEARCHABILITY_ALL : odbcabstraction::SEARCHABILITY_NONE;
+    // DuckDB supports WHERE, GROUP BY, and ORDER BY on all types.
+    // The Flight SQL server may return 0 (unsearchable) if GetXdbcTypeInfo
+    // doesn't populate this field, so always report SQL_SEARCHABLE.
+    data.searchable = odbcabstraction::SEARCHABILITY_ALL;
     data.unsigned_attribute = reader.GetUnsignedAttribute();
     data.fixed_prec_scale = reader.GetFixedPrecScale();
     data.auto_unique_value = reader.GetAutoIncrement();
