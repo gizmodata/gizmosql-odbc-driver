@@ -255,6 +255,8 @@ std::string GetTypeNameFromSqlDataType(int16_t data_type) {
     return "INTERVAL_MINUTE_TO_SECOND";
   case SqlDataType_GUID:
     return "GUID";
+  case 16: // SQL_BOOLEAN (SQL/CLI standard, used by DuckDB)
+    return "BOOLEAN";
   }
 
   throw driver::odbcabstraction::DriverException("Unsupported data type: " +

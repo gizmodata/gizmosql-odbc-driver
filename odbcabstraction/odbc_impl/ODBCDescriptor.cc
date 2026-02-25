@@ -465,7 +465,14 @@ void ODBCDescriptor::PopulateFromResultSetMetadata(ResultSetMetadata* rsmd) {
     m_records[i].m_caseSensitive = rsmd->IsCaseSensitive(oneBasedIndex)? SQL_TRUE : SQL_FALSE;
     m_records[i].m_datetimeIntervalPrecision; // TODO - update when rsmd adds this
     m_records[i].m_numPrecRadix = rsmd->GetNumPrecRadix(oneBasedIndex);
-    m_records[i].m_datetimeIntervalCode; // TODO
+    // SQL_DESC_DATETIME_INTERVAL_CODE: for datetime types, set the sub-code
+    // (DATE=1, TIME=2, TIMESTAMP=3).  For all other types, leave as 0.
+    switch (m_records[i].m_conciseType) {
+    case SQL_TYPE_DATE:      m_records[i].m_datetimeIntervalCode = SQL_CODE_DATE; break;
+    case SQL_TYPE_TIME:      m_records[i].m_datetimeIntervalCode = SQL_CODE_TIME; break;
+    case SQL_TYPE_TIMESTAMP: m_records[i].m_datetimeIntervalCode = SQL_CODE_TIMESTAMP; break;
+    default:                 m_records[i].m_datetimeIntervalCode = 0; break;
+    }
     m_records[i].m_fixedPrecScale = rsmd->IsFixedPrecScale(oneBasedIndex) ? SQL_TRUE : SQL_FALSE;
     m_records[i].m_nullable = rsmd->IsNullable(oneBasedIndex);
     m_records[i].m_paramType = SQL_PARAM_INPUT;

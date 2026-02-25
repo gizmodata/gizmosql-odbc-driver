@@ -250,6 +250,8 @@ set(GIZMOSQL_ODBC_SPI_SOURCES
   flight_sql_ssl_config.h
   flight_sql_statement.cc
   flight_sql_statement.h
+  odbc_escape_sequences.cc
+  odbc_escape_sequences.h
   flight_sql_statement_get_columns.cc
   flight_sql_statement_get_columns.h
   flight_sql_statement_get_tables.cc
@@ -370,6 +372,7 @@ set(GIZMOSQL_ODBC_SPI_TEST_SOURCES
   json_converter_test.cc
   record_batch_transformer_test.cc
   utils_test.cc
+  odbc_escape_sequences_test.cc
   flight_sql_statement_parameters_test.cc
 )
 

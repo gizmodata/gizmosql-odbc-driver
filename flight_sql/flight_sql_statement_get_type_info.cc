@@ -89,13 +89,16 @@ Transform_inner(const odbcabstraction::OdbcVersion odbc_version,
     data.data_type = odbc_version == odbcabstraction::V_3
                      ? data_type_v3
                      : data_type_v2;
-    // When EnsureRightSqlCharType remaps the DATA_TYPE (e.g., VARCHAR → WVARCHAR
-    // on Windows), update TYPE_NAME to match so that Power BI can look up the
-    // column's type name (from SQLColAttributeW SQL_DESC_TYPE_NAME) in this table.
-    auto original_data_type = static_cast<odbcabstraction::SqlDataType>(reader.GetDataType());
-    if (data_type_v3 != original_data_type) {
+    // Always compute TYPE_NAME from the (possibly remapped) SQL data type so
+    // it matches the value returned by SQLColAttributeW(SQL_DESC_TYPE_NAME),
+    // which is also computed via GetTypeNameFromSqlDataType.  The server may
+    // return different names (e.g. "INT" vs "INTEGER") that would cause Power
+    // BI's Mashup engine to fail the type-name lookup and treat columns as
+    // UNSEARCHABLE, breaking DirectQuery folding.
+    // Fall back to the server's raw type name for any types not in our mapping.
+    try {
       data.type_name = GetTypeNameFromSqlDataType(static_cast<int16_t>(data_type_v3));
-    } else {
+    } catch (...) {
       data.type_name = reader.GetTypeName();
     }
     data.column_size = reader.GetColumnSize();
@@ -118,10 +121,16 @@ Transform_inner(const odbcabstraction::OdbcVersion odbc_version,
     data.unsigned_attribute = reader.GetUnsignedAttribute();
     data.fixed_prec_scale = reader.GetFixedPrecScale();
     data.auto_unique_value = reader.GetAutoIncrement();
-    data.local_type_name = reader.GetLocalTypeName();
+    data.local_type_name = data.type_name;
     data.minimum_scale = reader.GetMinimumScale();
     data.maximum_scale = reader.GetMaximumScale();
-    data.sql_data_type = EnsureRightSqlCharType(static_cast<odbcabstraction::SqlDataType>(reader.GetSqlDataType()), metadata_settings_.use_wide_char_);
+    // ODBC 3.x requires SQL_DATA_TYPE (column 16) to be the non-concise
+    // (verbose) type: SQL_DATETIME (9) for date/time types, SQL_INTERVAL (10)
+    // for interval types, and the same as DATA_TYPE for everything else.
+    // The Flight SQL server returns the concise type (e.g. 91 for DATE);
+    // GetNonConciseDataType maps it to the correct verbose value.
+    data.sql_data_type = GetNonConciseDataType(
+        EnsureRightSqlCharType(static_cast<odbcabstraction::SqlDataType>(reader.GetSqlDataType()), metadata_settings_.use_wide_char_));
     data.sql_datetime_sub = GetSqlDateTimeSubCode(static_cast<odbcabstraction::SqlDataType>(data.data_type));
     data.num_prec_radix = reader.GetNumPrecRadix();
     data.interval_precision = reader.GetIntervalPrecision();

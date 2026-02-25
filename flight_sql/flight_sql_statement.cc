@@ -18,6 +18,7 @@
 #include "flight_sql_statement_get_tables.h"
 #include "flight_sql_statement_get_type_info.h"
 #include "record_batch_transformer.h"
+#include "odbc_escape_sequences.h"
 #include "utils.h"
 #include <arrow/io/memory.h>
 #include <arrow/builder.h>
@@ -128,8 +129,9 @@ boost::optional<std::shared_ptr<ResultSetMetadata>>
 FlightSqlStatement::Prepare(const std::string &query) {
   ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
+  const std::string native_query = TranslateOdbcEscapes(query);
   Result<std::shared_ptr<PreparedStatement>> result =
-      sql_client_.Prepare(call_options_, query);
+      sql_client_.Prepare(call_options_, native_query);
   ThrowIfNotOK(result.status());
 
   prepared_statement_ = *result;
@@ -159,8 +161,9 @@ bool FlightSqlStatement::ExecutePrepared() {
 bool FlightSqlStatement::Execute(const std::string &query) {
   ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
+  const std::string native_query = TranslateOdbcEscapes(query);
   Result<std::shared_ptr<FlightInfo>> result =
-      sql_client_.Execute(call_options_, query);
+      sql_client_.Execute(call_options_, native_query);
   ThrowIfNotOK(result.status());
 
   flight_info_ = result.ValueOrDie();
