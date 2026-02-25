@@ -283,7 +283,7 @@ export GIZMOSQL_ODBC_TRACE=1
 python my_script.py
 ```
 
-Trace output is written to `C:\odbc_trace.log` (Windows). Each entry includes a timestamp and logs function name, parameters, and return values for all major ODBC calls (`SQLDriverConnectW`, `SQLExecDirectW`, `SQLFetch`, `SQLGetData`, `SQLColAttributeW`, `SQLGetTypeInfo`, `SQLColumnsW`, `SQLTablesW`, `SQLBindParameter`, etc.).
+Trace output is written to `C:\odbc_trace.log` (Windows) or `/tmp/odbc_trace.log` (macOS/Linux). Each entry includes a timestamp and logs function name, parameters, and return values for all major ODBC calls (`SQLDriverConnectW`, `SQLExecDirectW`, `SQLFetch`, `SQLGetData`, `SQLColAttributeW`, `SQLGetTypeInfo`, `SQLColumnsW`, `SQLTablesW`, `SQLBindParameter`, etc.).
 
 To disable tracing, unset the variable or set it to any value other than `1`.
 

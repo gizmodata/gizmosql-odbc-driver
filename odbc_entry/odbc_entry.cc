@@ -36,8 +36,8 @@ using namespace ODBC;
 using namespace driver::odbcabstraction;
 
 // ============================================================================
-// Trace logging — writes to C:\odbc_trace.log
-// Enabled by setting environment variable GIZMOSQL_ODBC_TRACE=1
+// Trace logging — enabled by setting environment variable GIZMOSQL_ODBC_TRACE=1
+// Writes to: C:\odbc_trace.log (Windows) or /tmp/odbc_trace.log (macOS/Linux)
 // ============================================================================
 static std::mutex g_trace_mutex;
 static int g_trace_enabled = -1; // -1 = not yet checked
@@ -53,14 +53,28 @@ static bool IsTraceEnabled() {
 static void TraceLog(const char *fmt, ...) {
   if (!IsTraceEnabled()) return;
   std::lock_guard<std::mutex> lock(g_trace_mutex);
+#ifdef _WIN32
   FILE *f = fopen("C:\\odbc_trace.log", "a");
+#else
+  FILE *f = fopen("/tmp/odbc_trace.log", "a");
+#endif
   if (!f) return;
   // Timestamp
+#ifdef _WIN32
   SYSTEMTIME st;
   GetLocalTime(&st);
   fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d.%03d  ",
           st.wYear, st.wMonth, st.wDay,
           st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+#else
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  struct tm tm;
+  localtime_r(&ts.tv_sec, &tm);
+  fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d.%03d  ",
+          tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+          tm.tm_hour, tm.tm_min, tm.tm_sec, (int)(ts.tv_nsec / 1000000));
+#endif
   va_list ap;
   va_start(ap, fmt);
   vfprintf(f, fmt, ap);
