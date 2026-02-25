@@ -9,6 +9,7 @@
 #include <cctype>
 #include <stdexcept>
 #include <unordered_map>
+#include <vector>
 
 namespace driver {
 namespace flight_sql {
