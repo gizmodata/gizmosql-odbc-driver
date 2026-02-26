@@ -277,6 +277,11 @@ Connection::Info GetInfoCache::GetInfo(uint16_t info_type) {
 bool GetInfoCache::LoadInfoFromServer() {
   if (sql_client_ && !has_server_info_.exchange(true)) {
     std::unique_lock<std::mutex> lock(mutex_);
+
+    // Wrap server call in try-catch so defaults are always loaded even
+    // if GetSqlInfo fails. Without this, has_server_info_ would be true
+    // but no defaults would be set, causing all GetInfo calls to fail.
+    try {
     arrow::Result<std::shared_ptr<FlightInfo>> result =
         sql_client_->GetSqlInfo(call_options_, {});
     ThrowIfNotOK(result.status());
@@ -1101,6 +1106,10 @@ bool GetInfoCache::LoadInfoFromServer() {
       } else {
         info_[SQL_CORRELATION_NAME] = static_cast<uint16_t>(SQL_CN_NONE);
       }
+    }
+    } catch (const std::exception &e) {
+      // Log but don't propagate — defaults will fill in the gaps.
+      (void)e;
     }
     LoadDefaultsForMissingEntries();
     return true;
