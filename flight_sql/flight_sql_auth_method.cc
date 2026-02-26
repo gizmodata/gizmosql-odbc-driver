@@ -402,13 +402,26 @@ void OAuthAuthMethod::Authenticate(FlightSqlConnection &connection,
   // the browser-based OAuth flow.
   std::pair<std::string, std::string> cached_token;
   if (ReadCachedToken(host_, port_, cached_token)) {
-    call_options.headers.push_back(cached_token);
-    LOG_INFO("Using file-cached OAuth bearer token for " + host_ + ":" +
-             std::to_string(port_));
-    return;
+    // Validate the cached token with a lightweight RPC before trusting it.
+    // If the token has expired or its signing key rotated, clear the cache
+    // and fall through to the full OAuth flow instead of returning a stale token.
+    FlightCallOptions probe_options;
+    probe_options.headers.push_back(cached_token);
+    arrow::Result<std::vector<arrow::flight::ActionType>> probe_result =
+        client_.ListActions(probe_options);
+    if (probe_result.ok()) {
+      call_options.headers.push_back(cached_token);
+      LOG_INFO("Cached OAuth bearer token validated for " + host_ + ":" +
+               std::to_string(port_));
+      return;
+    }
+    // Token is stale — clear cache and proceed with fresh OAuth flow
+    LOG_INFO("Cached OAuth bearer token invalid for " + host_ + ":" +
+             std::to_string(port_) + ": " + probe_result.status().ToString());
+    RemoveCachedToken(host_, port_);
   }
 
-  // No cached token — full OAuth flow (3 phases)
+  // Full OAuth flow (3 phases)
   std::string oauth_base_url = DiscoverOAuthUrl(connection);
   LOG_INFO("OAuth discovery returned base URL: " + oauth_base_url);
 
