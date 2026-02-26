@@ -72,10 +72,12 @@ const std::string FlightSqlConnection::USE_WIDE_CHAR = "UseWideChar";
 const std::string FlightSqlConnection::CHUNK_BUFFER_CAPACITY = "ChunkBufferCapacity";
 const std::string FlightSqlConnection::HIDE_SQL_TABLES_LISTING = "HideSQLTablesListing";
 const std::string FlightSqlConnection::AUTH_TYPE = "authType";
+const std::string FlightSqlConnection::OAUTH_SERVER_PORT = "oauthServerPort";
 const std::string FlightSqlConnection::SEND_PING_FRAME = "SendPingFrame";
 const std::string FlightSqlConnection::PING_FRAME_INTERVAL_MS = "PingFrameIntervalMilliseconds";
 const std::string FlightSqlConnection::PING_FRAME_TIMEOUT_MS = "PingFrameTimeoutMilliseconds";
 const std::string FlightSqlConnection::MAX_PINGS_WITHOUT_DATA = "MaxPingsWithoutData";
+const std::string FlightSqlConnection::DEFAULT_CATALOG = "defaultCatalog";
 
 const std::vector<std::string> FlightSqlConnection::ALL_KEYS = {
     FlightSqlConnection::DSN, FlightSqlConnection::DRIVER, FlightSqlConnection::HOST, FlightSqlConnection::PORT,
@@ -84,9 +86,10 @@ const std::vector<std::string> FlightSqlConnection::ALL_KEYS = {
     FlightSqlConnection::DISABLE_CERTIFICATE_VERIFICATION, FlightSqlConnection::STRING_COLUMN_LENGTH,
     FlightSqlConnection::USE_WIDE_CHAR, FlightSqlConnection::USE_EXTENDED_FLIGHTSQL_BUFFER, FlightSqlConnection::CHUNK_BUFFER_CAPACITY,
     FlightSqlConnection::HIDE_SQL_TABLES_LISTING, FlightSqlConnection::AUTH_TYPE,
-    FlightSqlConnection::SEND_PING_FRAME,
+    FlightSqlConnection::OAUTH_SERVER_PORT, FlightSqlConnection::SEND_PING_FRAME,
     FlightSqlConnection::PING_FRAME_INTERVAL_MS, FlightSqlConnection::PING_FRAME_TIMEOUT_MS,
-    FlightSqlConnection::MAX_PINGS_WITHOUT_DATA};
+    FlightSqlConnection::MAX_PINGS_WITHOUT_DATA,
+    FlightSqlConnection::DEFAULT_CATALOG};
 
 namespace {
 
@@ -143,10 +146,12 @@ const std::set<std::string, odbcabstraction::CaseInsensitiveComparator> BUILT_IN
     FlightSqlConnection::USE_WIDE_CHAR,
     FlightSqlConnection::USE_EXTENDED_FLIGHTSQL_BUFFER,
     FlightSqlConnection::AUTH_TYPE,
+    FlightSqlConnection::OAUTH_SERVER_PORT,
     FlightSqlConnection::SEND_PING_FRAME,
     FlightSqlConnection::PING_FRAME_INTERVAL_MS,
     FlightSqlConnection::PING_FRAME_TIMEOUT_MS,
-    FlightSqlConnection::MAX_PINGS_WITHOUT_DATA
+    FlightSqlConnection::MAX_PINGS_WITHOUT_DATA,
+    FlightSqlConnection::DEFAULT_CATALOG
 };
 
 Connection::ConnPropertyMap::const_iterator
@@ -190,12 +195,20 @@ void FlightSqlConnection::Connect(const ConnPropertyMap &properties,
         &cookie_factory = arrow::flight::GetCookieFactory();
     client_options.middleware.push_back(cookie_factory);
 
+    // Conditionally add OAuth discovery middleware when authType=external
+    std::shared_ptr<OAuthDiscoveryMiddlewareFactory> oauth_discovery;
+    auto it_auth = properties.find(AUTH_TYPE);
+    if (it_auth != properties.end() && it_auth->second == "external") {
+      oauth_discovery = std::make_shared<OAuthDiscoveryMiddlewareFactory>();
+      client_options.middleware.push_back(oauth_discovery);
+    }
+
     auto flight_client_result = FlightClient::Connect(location, client_options);
     ThrowIfNotOK(flight_client_result.status());
     std::unique_ptr<FlightClient> flight_client = std::move(flight_client_result).ValueUnsafe();
 
     std::unique_ptr<FlightSqlAuthMethod> auth_method =
-      FlightSqlAuthMethod::FromProperties(flight_client, properties);
+      FlightSqlAuthMethod::FromProperties(flight_client, properties, oauth_discovery);
     auth_method->Authenticate(*this, call_options_);
 
     sql_client_.reset(new FlightSqlClient(std::move(flight_client)));
@@ -209,6 +222,15 @@ void FlightSqlConnection::Connect(const ConnPropertyMap &properties,
 
     PopulateMetadataSettings(properties);
     PopulateCallOptions(properties);
+
+    // Switch to the requested default catalog/database if specified
+    auto it_catalog = properties.find(DEFAULT_CATALOG);
+    if (it_catalog != properties.end() && !it_catalog->second.empty()) {
+      FlightCallOptions use_options = call_options_;
+      auto result = sql_client_->ExecuteUpdate(use_options, "USE " + it_catalog->second);
+      ThrowIfNotOK(result.status());
+      attribute_[CURRENT_CATALOG] = it_catalog->second;
+    }
   } catch (...) {
     attribute_[CONNECTION_DEAD] = static_cast<uint32_t>(SQL_TRUE);
     sql_client_.reset();

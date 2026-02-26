@@ -45,7 +45,7 @@ namespace config {
 DsnConfigurationWindow::DsnConfigurationWindow(Window* parent, config::Configuration& config) :
     CustomWindow(parent, "GizmoSQLConfigureDSN", "Configure GizmoSQL ODBC"),
     width(480),
-    height(375),
+    height(405),
     config(config),
     accepted(false),
     isInitialized(false)
@@ -142,6 +142,13 @@ int DsnConfigurationWindow::CreateConnectionSettingsGroup(int posX, int posY, in
     labels.push_back(CreateLabel(labelPosX, rowPos, LABEL_WIDTH, ROW_HEIGHT,
         "Port:", ChildId::PORT_LABEL));
     portEdit = CreateEdit(editPosX, rowPos, editSizeX, ROW_HEIGHT, val, ChildId::PORT_EDIT, ES_NUMBER);
+
+    rowPos += INTERVAL + ROW_HEIGHT;
+
+    val = config.Get(FlightSqlConnection::DEFAULT_CATALOG).c_str();
+    labels.push_back(CreateLabel(labelPosX, rowPos, LABEL_WIDTH, ROW_HEIGHT,
+        "Default Catalog:", ChildId::DEFAULT_CATALOG_LABEL));
+    defaultCatalogEdit = CreateEdit(editPosX, rowPos, editSizeX, ROW_HEIGHT, val, ChildId::DEFAULT_CATALOG_EDIT);
 
     rowPos += INTERVAL + ROW_HEIGHT;
 
@@ -319,11 +326,12 @@ void DsnConfigurationWindow::SelectTab(int tabIndex) {
     nameEdit->SetVisible(COMMON_TAB == tabIndex);
     serverEdit->SetVisible(COMMON_TAB == tabIndex);
     portEdit->SetVisible(COMMON_TAB == tabIndex);
+    defaultCatalogEdit->SetVisible(COMMON_TAB == tabIndex);
     authTypeComboBox->SetVisible(COMMON_TAB == tabIndex);
     userEdit->SetVisible(COMMON_TAB == tabIndex);
     passwordEdit->SetVisible(COMMON_TAB == tabIndex);
     authTokenEdit->SetVisible(COMMON_TAB == tabIndex);
-    for (size_t i = 0; i < 7; ++i) {
+    for (size_t i = 0; i < 8; ++i) {
         labels[i]->SetVisible(COMMON_TAB == tabIndex);
     }
 
@@ -393,6 +401,9 @@ void DsnConfigurationWindow::SaveParameters(Configuration& targetConfig)
     catch (std::exception&) {
         throw odbcabstraction::DriverException("Invalid port value.");
     }
+
+    defaultCatalogEdit->GetText(text);
+    targetConfig.Set(FlightSqlConnection::DEFAULT_CATALOG, text);
 
     const int authSelection = authTypeComboBox->GetSelection();
     if (0 == authSelection)

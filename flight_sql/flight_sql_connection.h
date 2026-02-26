@@ -66,10 +66,12 @@ public:
   static const std::string CHUNK_BUFFER_CAPACITY;
   static const std::string HIDE_SQL_TABLES_LISTING;
   static const std::string AUTH_TYPE;
+  static const std::string OAUTH_SERVER_PORT;
   static const std::string SEND_PING_FRAME;
   static const std::string PING_FRAME_INTERVAL_MS;
   static const std::string PING_FRAME_TIMEOUT_MS;
   static const std::string MAX_PINGS_WITHOUT_DATA;
+  static const std::string DEFAULT_CATALOG;
 
   explicit FlightSqlConnection(odbcabstraction::OdbcVersion odbc_version, const std::string &driver_version = "0.9.0.0");
 

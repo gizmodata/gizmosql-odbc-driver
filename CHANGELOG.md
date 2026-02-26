@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Add `defaultCatalog` connection property to specify which database/catalog to use at connection time. After authentication, the driver executes `USE <catalog>` to switch the server-side database and sets the ODBC `CURRENT_CATALOG` attribute. This allows Power BI and other ODBC clients to see tables from the correct database instead of the server's default (typically empty `memory`). The property is available in connection strings, DSN configuration UI, and DSN registry settings.
+
+### Fixed
+- Fix OAuth (`authType=external`) requiring browser re-authentication on every Power BI query: the bearer token obtained from the OAuth flow was stored only per-connection and discarded on close. Power BI DirectQuery creates a new connection for each query, triggering the full browser-based OAuth flow every time. Bearer tokens are now cached process-wide and reused across connections. If the cached token expires, the driver automatically clears the cache and triggers a fresh OAuth flow.
+- Fix OAuth (`authType=external`) browser-based authentication: rewrite to match the GizmoSQL server's 3-phase OAuth protocol — (1) discover OAuth URL via `x-gizmosql-oauth-url` gRPC response header, (2) initiate OAuth session and poll for token via HTTP REST endpoints (`/oauth/initiate`, `/oauth/token/{uuid}`), (3) exchange access token via Flight Handshake with username=`token`. Previously the driver tried to extract the OAuth URL from `FlightStatus::extra_info()` and polled via repeated gRPC handshakes, which didn't match the server protocol, causing "Token verification failed: Invalid input; too much fill".
+
 ## [v1.0.0] - 2026-02-25
 
 ### Fixed

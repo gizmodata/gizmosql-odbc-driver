@@ -107,8 +107,9 @@ void Configuration::LoadDsn(const std::string& dsn)
     Set(FlightSqlConnection::TRUSTED_CERTS, ReadDsnString(dsn, FlightSqlConnection::TRUSTED_CERTS));
     Set(FlightSqlConnection::USE_SYSTEM_TRUST_STORE, 
         ReadDsnString(dsn, FlightSqlConnection::USE_SYSTEM_TRUST_STORE, DEFAULT_USE_CERT_STORE));
-    Set(FlightSqlConnection::DISABLE_CERTIFICATE_VERIFICATION, 
+    Set(FlightSqlConnection::DISABLE_CERTIFICATE_VERIFICATION,
         ReadDsnString(dsn, FlightSqlConnection::DISABLE_CERTIFICATE_VERIFICATION, DEFAULT_DISABLE_CERT_VERIFICATION));
+    Set(FlightSqlConnection::DEFAULT_CATALOG, ReadDsnString(dsn, FlightSqlConnection::DEFAULT_CATALOG));
 
     auto customKeys = ReadAllKeys(dsn);
     RemoveAllKnownKeys(customKeys);

@@ -34,6 +34,8 @@ class DsnConfigurationWindow : public CustomWindow
             SERVER_LABEL,
             PORT_EDIT,
             PORT_LABEL,
+            DEFAULT_CATALOG_EDIT,
+            DEFAULT_CATALOG_LABEL,
             AUTH_TYPE_LABEL,
             AUTH_TYPE_COMBOBOX,
             USER_LABEL,
@@ -177,6 +179,8 @@ private:
     std::unique_ptr<Window> serverEdit;
 
     std::unique_ptr<Window> portEdit;
+
+    std::unique_ptr<Window> defaultCatalogEdit;
 
     std::unique_ptr<Window> authTypeComboBox;
 
