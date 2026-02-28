@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v1.1.0] - 2026-02-28
+
 ### Added
 - Transaction support via `SQL_ATTR_AUTOCOMMIT` and `SQLEndTran`, using Flight SQL `BeginTransaction`/`Commit`/`Rollback` RPCs. pyodbc, SQLAlchemy, and other clients that set `SQL_AUTOCOMMIT_OFF` now work correctly. When autocommit is OFF, transactions begin implicitly on first statement execution and are committed/rolled back via `SQLEndTran`. Open transactions are rolled back on disconnect (ODBC spec §SQLDisconnect).
 - Add `defaultCatalog` connection property to specify which database/catalog to use at connection time. After authentication, the driver executes `USE <catalog>` to switch the server-side database and sets the ODBC `CURRENT_CATALOG` attribute. This allows Power BI and other ODBC clients to see tables from the correct database instead of the server's default (typically empty `memory`). The property is available in connection strings, DSN configuration UI, and DSN registry settings.
