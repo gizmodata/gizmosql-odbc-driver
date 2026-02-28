@@ -93,23 +93,23 @@ def test_commit():
 
 @test("pyodbc rollback transaction")
 def test_rollback():
-    # First create the table in autocommit mode
-    conn = pyodbc.connect(CONN_STR, autocommit=True)
-    cursor = conn.cursor()
-    cursor.execute("DROP TABLE IF EXISTS pyodbc_rollback_test")
-    cursor.execute("CREATE TABLE pyodbc_rollback_test (id INTEGER)")
-    conn.close()
-
-    # Now insert in a transaction and rollback
+    # Create table and insert a seed row in a committed transaction
     conn = pyodbc.connect(CONN_STR, autocommit=False)
     cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS pyodbc_rollback_test")
+    conn.commit()
+    cursor.execute("CREATE TABLE pyodbc_rollback_test (id INTEGER)")
+    cursor.execute("INSERT INTO pyodbc_rollback_test VALUES (1)")
+    conn.commit()
+
+    # Insert another row and rollback — only the new row should be undone
     cursor.execute("INSERT INTO pyodbc_rollback_test VALUES (999)")
     conn.rollback()
 
     cursor.execute("SELECT COUNT(*) FROM pyodbc_rollback_test")
     count = cursor.fetchone()[0]
     conn.commit()
-    assert count == 0, f"Expected 0 rows after rollback, got {count}"
+    assert count == 1, f"Expected 1 row after rollback (seed row only), got {count}"
 
     # Cleanup
     conn.autocommit = True
