@@ -12,6 +12,11 @@ import sys
 import traceback
 import pyodbc
 
+# Disable unixODBC connection pooling — pooled connections retain stale
+# transaction state and session handles, causing UTF-16 decode errors
+# when pyodbc reads diagnostic messages from a reused connection.
+pyodbc.pooling = False
+
 DRIVER_PATH = os.environ.get("GIZMOSQL_DRIVER", "/tmp/libgizmosql-odbc.so")
 CONN_STR = (
     f"Driver={DRIVER_PATH};"
