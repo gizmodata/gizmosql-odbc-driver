@@ -155,12 +155,11 @@ bool FlightSqlStatement::ExecutePrepared() {
 
   flight_info_ = result.ValueOrDie();
 
-  // GizmoSQL lazy execution: for DDL/DML with empty endpoints, use
-  // ExecuteUpdate on the prepared statement to force immediate execution.
+  // For DDL/DML the server returns empty endpoints (no result rows).
+  // The prepared statement Execute() already executed the statement on the
+  // server, so just return the update count without creating a result set.
   if (flight_info_->endpoints().empty()) {
-    auto update_result = prepared_statement_->ExecuteUpdate(call_options_);
-    ThrowIfNotOK(update_result.status());
-    update_count_ = *update_result;
+    update_count_ = flight_info_->total_records();
     return false;  // No result set for DDL/DML
   }
 
