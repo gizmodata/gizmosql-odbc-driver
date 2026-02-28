@@ -155,6 +155,15 @@ bool FlightSqlStatement::ExecutePrepared() {
 
   flight_info_ = result.ValueOrDie();
 
+  // GizmoSQL lazy execution: for DDL/DML with empty endpoints, use
+  // ExecuteUpdate on the prepared statement to force immediate execution.
+  if (flight_info_->endpoints().empty()) {
+    auto update_result = prepared_statement_->ExecuteUpdate(call_options_);
+    ThrowIfNotOK(update_result.status());
+    update_count_ = *update_result;
+    return false;  // No result set for DDL/DML
+  }
+
   update_count_ = flight_info_->total_records();
   current_result_set_ = std::make_shared<FlightSqlResultSet>(
       sql_client_, call_options_, flight_info_, nullptr, diagnostics_, metadata_settings_);
@@ -172,6 +181,18 @@ bool FlightSqlStatement::Execute(const std::string &query) {
   ThrowIfNotOK(result.status());
 
   flight_info_ = result.ValueOrDie();
+
+  // GizmoSQL lazy execution: GetFlightInfo only plans the query. For DDL/DML
+  // the server returns empty endpoints (no data to fetch). If the client never
+  // calls DoGet(), the statement is never executed. Fall back to ExecuteUpdate
+  // (DoPut RPC) which executes immediately without requiring a fetch.
+  if (flight_info_->endpoints().empty()) {
+    auto update_result = sql_client_.ExecuteUpdate(
+        call_options_, native_query, connection_.GetCurrentTransaction());
+    ThrowIfNotOK(update_result.status());
+    update_count_ = *update_result;
+    return false;  // No result set for DDL/DML
+  }
 
   update_count_ = flight_info_->total_records();
   current_result_set_ = std::make_shared<FlightSqlResultSet>(
