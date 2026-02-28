@@ -150,22 +150,23 @@ FlightSqlStatement::Prepare(const std::string &query) {
 bool FlightSqlStatement::ExecutePrepared() {
   assert(prepared_statement_.get() != nullptr);
 
-  Result<std::shared_ptr<FlightInfo>> result = prepared_statement_->Execute(call_options_);
-  ThrowIfNotOK(result.status());
-
-  flight_info_ = result.ValueOrDie();
-
-  // GizmoSQL lazy execution: prepared_statement_->Execute() only calls
-  // GetFlightInfo (returns schema), it does NOT execute the statement.
-  // Execution is deferred to DoGet (triggered by fetch). For DDL/DML with
-  // empty endpoints, the client would never fetch, so the statement would
-  // never execute. Use ExecuteUpdate (DoPut) to execute immediately.
-  if (flight_info_->endpoints().empty()) {
+  // GizmoSQL lazy execution: Execute() only calls GetFlightInfo (returns
+  // schema), it does NOT execute the statement. Execution is deferred to
+  // DoGet (triggered by fetch). For DDL/DML, there are no result columns,
+  // so the client would never fetch and the statement would never execute.
+  // Detect DDL/DML via empty dataset_schema and use ExecuteUpdate (DoPut)
+  // to execute immediately, skipping the unnecessary GetFlightInfo call.
+  if (prepared_statement_->dataset_schema()->num_fields() == 0) {
     auto update_result = prepared_statement_->ExecuteUpdate(call_options_);
     ThrowIfNotOK(update_result.status());
     update_count_ = *update_result;
     return false;  // No result set for DDL/DML
   }
+
+  Result<std::shared_ptr<FlightInfo>> result = prepared_statement_->Execute(call_options_);
+  ThrowIfNotOK(result.status());
+
+  flight_info_ = result.ValueOrDie();
 
   update_count_ = flight_info_->total_records();
   current_result_set_ = std::make_shared<FlightSqlResultSet>(
