@@ -16,7 +16,8 @@ CONN_STR = (
     f"Driver={DRIVER_PATH};"
     "host=localhost;port=31337;"
     "uid=gizmosql_user;pwd=gizmosql_password;"
-    "useEncryption=false"
+    "useEncryption=false;"
+    "defaultCatalog=test"
 )
 
 passed = 0
@@ -72,22 +73,16 @@ def test_default_connect():
 def test_commit():
     conn = pyodbc.connect(CONN_STR, autocommit=True)
     cursor = conn.cursor()
-    print("    step 1: DROP TABLE (autocommit=True)")
     cursor.execute("DROP TABLE IF EXISTS pyodbc_commit_test")
     conn.close()
 
     conn = pyodbc.connect(CONN_STR, autocommit=False)
     cursor = conn.cursor()
-    print("    step 2: CREATE TABLE (autocommit=False)")
     cursor.execute("CREATE TABLE pyodbc_commit_test (id INTEGER, name VARCHAR)")
-    print("    step 3: INSERT")
     cursor.execute("INSERT INTO pyodbc_commit_test VALUES (1, 'alice')")
-    print("    step 4: COMMIT")
     conn.commit()
 
-    print("    step 5: SELECT COUNT(*)")
     cursor.execute("SELECT COUNT(*) FROM pyodbc_commit_test")
-    print("    step 6: fetchone()")
     count = cursor.fetchone()[0]
     assert count == 1, f"Expected 1 row after commit, got {count}"
 
@@ -99,11 +94,14 @@ def test_commit():
 
 @test("pyodbc rollback transaction")
 def test_rollback():
-    # First create the table in autocommit mode — it MUST persist across connections
-    conn = pyodbc.connect(CONN_STR, autocommit=True)
+    # Create the table with explicit commit — GizmoSQL reuses server sessions via
+    # cached bearer tokens, so DDL must be committed via Flight SQL Commit RPC to
+    # ensure it persists across connections on the same session.
+    conn = pyodbc.connect(CONN_STR, autocommit=False)
     cursor = conn.cursor()
     cursor.execute("DROP TABLE IF EXISTS pyodbc_rollback_test")
     cursor.execute("CREATE TABLE pyodbc_rollback_test (id INTEGER)")
+    conn.commit()
     conn.close()
 
     # Now insert in a transaction and rollback

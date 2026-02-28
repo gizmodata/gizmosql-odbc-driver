@@ -180,22 +180,40 @@ bool FlightSqlStatement::Execute(const std::string &query) {
 
   connection_.EnsureTransaction();
   const std::string native_query = TranslateOdbcEscapes(query);
-  Result<std::shared_ptr<FlightInfo>> result =
-      sql_client_.Execute(call_options_, native_query, connection_.GetCurrentTransaction());
-  ThrowIfNotOK(result.status());
 
-  flight_info_ = result.ValueOrDie();
+  // GizmoSQL lazy execution: GetFlightInfo only plans the query — it does NOT
+  // execute it. Actual execution is deferred to DoGet (fetch) or ExecuteUpdate
+  // (DoPut RPC). For DDL/DML the server returns no result columns, so the
+  // client would never fetch and the statement would never execute.
+  //
+  // To handle this correctly (matching the JDBC driver pattern), we Prepare()
+  // first to get the schema, then route based on whether the statement returns
+  // result columns:
+  //   - DDL/DML (0 result columns) → ExecuteUpdate (immediate execution)
+  //   - SELECT (>0 result columns) → Execute (GetFlightInfo → DoGet)
+  // This avoids calling both GetFlightInfo and ExecuteUpdate on the same query,
+  // which corrupts internal state on some platforms.
+  Result<std::shared_ptr<PreparedStatement>> prepare_result =
+      sql_client_.Prepare(call_options_, native_query, connection_.GetCurrentTransaction());
+  ThrowIfNotOK(prepare_result.status());
 
-  // GizmoSQL lazy execution: GetFlightInfo only plans the query. For DDL/DML
-  // the server returns empty endpoints (no data to fetch). If the client never
-  // calls DoGet(), the statement is never executed. Fall back to ExecuteUpdate
-  // (DoPut RPC) which executes immediately without requiring a fetch.
-  if (flight_info_->endpoints().empty()) {
-    auto update_result = sql_client_.ExecuteUpdate(
-        call_options_, native_query, connection_.GetCurrentTransaction());
+  prepared_statement_ = *prepare_result;
+
+  if (prepared_statement_->dataset_schema()->num_fields() == 0) {
+    // DDL/DML: use ExecuteUpdate (DoPut) for immediate execution
+    auto update_result = prepared_statement_->ExecuteUpdate(call_options_);
     ThrowIfNotOK(update_result.status());
     update_count_ = *update_result;
+    ThrowIfNotOK(prepared_statement_->Close(call_options_));
+    prepared_statement_.reset();
     return false;  // No result set for DDL/DML
+  }
+
+  // SELECT: use Execute (GetFlightInfo → DoGet) for result set
+  {
+    Result<std::shared_ptr<FlightInfo>> result = prepared_statement_->Execute(call_options_);
+    ThrowIfNotOK(result.status());
+    flight_info_ = result.ValueOrDie();
   }
 
   update_count_ = flight_info_->total_records();

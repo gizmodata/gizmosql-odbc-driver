@@ -191,10 +191,7 @@ void FlightSqlConnection::Connect(const ConnPropertyMap &properties,
       BuildFlightClientOptions(properties, missing_attr,
                                flight_ssl_configs);
 
-    const std::shared_ptr<arrow::flight::ClientMiddlewareFactory>
-        &cookie_factory = arrow::flight::GetCookieFactory();
-    client_options.middleware.push_back(cookie_factory);
-
+    // Cookie middleware is already added in BuildFlightClientOptions.
     // Conditionally add OAuth discovery middleware when authType=external
     std::shared_ptr<OAuthDiscoveryMiddlewareFactory> oauth_discovery;
     auto it_auth = properties.find(AUTH_TYPE);
