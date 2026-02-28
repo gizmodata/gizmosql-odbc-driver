@@ -6,6 +6,7 @@
  */
 
 #include "flight_sql_statement.h"
+#include "flight_sql_connection.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -74,9 +75,11 @@ FlightSqlStatement::FlightSqlStatement(
     const odbcabstraction::Diagnostics& diagnostics,
     FlightSqlClient &sql_client,
     FlightCallOptions call_options,
-    const odbcabstraction::MetadataSettings& metadata_settings)
+    const odbcabstraction::MetadataSettings& metadata_settings,
+    FlightSqlConnection& connection)
     : diagnostics_("GizmoData", diagnostics.GetDataSourceComponent(), diagnostics.GetOdbcVersion()),
-      sql_client_(sql_client), call_options_(std::move(call_options)), metadata_settings_(metadata_settings) {
+      sql_client_(sql_client), call_options_(std::move(call_options)),
+      metadata_settings_(metadata_settings), connection_(connection) {
   attribute_[METADATA_ID] = static_cast<size_t>(SQL_FALSE);
   attribute_[MAX_LENGTH] = static_cast<size_t>(0);
   attribute_[NOSCAN] = static_cast<size_t>(SQL_NOSCAN_OFF);
@@ -129,9 +132,10 @@ boost::optional<std::shared_ptr<ResultSetMetadata>>
 FlightSqlStatement::Prepare(const std::string &query) {
   ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
+  connection_.EnsureTransaction();
   const std::string native_query = TranslateOdbcEscapes(query);
   Result<std::shared_ptr<PreparedStatement>> result =
-      sql_client_.Prepare(call_options_, native_query);
+      sql_client_.Prepare(call_options_, native_query, connection_.GetCurrentTransaction());
   ThrowIfNotOK(result.status());
 
   prepared_statement_ = *result;
@@ -161,9 +165,10 @@ bool FlightSqlStatement::ExecutePrepared() {
 bool FlightSqlStatement::Execute(const std::string &query) {
   ClosePreparedStatementIfAny(prepared_statement_, call_options_);
 
+  connection_.EnsureTransaction();
   const std::string native_query = TranslateOdbcEscapes(query);
   Result<std::shared_ptr<FlightInfo>> result =
-      sql_client_.Execute(call_options_, native_query);
+      sql_client_.Execute(call_options_, native_query, connection_.GetCurrentTransaction());
   ThrowIfNotOK(result.status());
 
   flight_info_ = result.ValueOrDie();

@@ -28,13 +28,23 @@ Key features:
 brew install gizmodata/tap/gizmosql-odbc
 ```
 
-The formula installs the driver library and prints post-install instructions for registering the driver and creating a DSN.
+The driver is registered automatically. To create a DSN, add the following to `~/.odbc.ini`:
+
+```ini
+[GizmoSQL]
+Driver        = GizmoSQL ODBC Driver
+host          = localhost
+port          = 32010
+uid           = your-username
+pwd           = your-password
+useEncryption = true
+```
 
 #### Manual install
 
 Download `libgizmosql-odbc.dylib` from the [latest release](https://github.com/gizmodata/gizmosql-odbc-driver/releases) and place it in a known location (e.g. `/usr/local/lib/`).
 
-Register the driver in `/usr/local/etc/odbcinst.ini`:
+Register the driver in `$(brew --prefix)/etc/odbcinst.ini` (or `/usr/local/etc/odbcinst.ini`):
 
 ```ini
 [GizmoSQL ODBC Driver]
@@ -47,7 +57,7 @@ Add a DSN in `~/.odbc.ini`:
 [GizmoSQL]
 Driver     = GizmoSQL ODBC Driver
 host       = localhost
-port       = 32010
+port       = 31337
 uid        = your-username
 pwd        = your-password
 useEncryption = true
@@ -63,6 +73,8 @@ useEncryption = true
 ```bash
 brew install gizmodata/tap/gizmosql-odbc
 ```
+
+The driver is registered automatically — see the macOS section above for DSN setup.
 
 #### Manual install
 
@@ -81,7 +93,7 @@ Add a DSN in `/etc/odbc.ini` or `~/.odbc.ini`:
 [GizmoSQL]
 Driver     = GizmoSQL ODBC Driver
 host       = localhost
-port       = 32010
+port       = 31337
 uid        = your-username
 pwd        = your-password
 useEncryption = true
@@ -159,9 +171,9 @@ conn = pyodbc.connect("DSN=GizmoSQL")
 conn = pyodbc.connect(
     "Driver=GizmoSQL ODBC Driver;"
     "host=localhost;"
-    "port=32010;"
-    "uid=my-user;"
-    "pwd=my-password;"
+    "port=31337;"
+    "uid=gizmosql_user;"
+    "pwd=gizmosql_password;"
     "useEncryption=true"
 )
 
@@ -176,7 +188,7 @@ conn.close()
 ### Connection String
 
 ```
-Driver=GizmoSQL ODBC Driver;host=gizmosql.example.com;port=443;token=eyJhbGci...;useEncryption=true
+Driver=GizmoSQL ODBC Driver;host=gizmosql.example.com;port=31337;token=eyJhbGci...;useEncryption=true
 ```
 
 ## Building from Source

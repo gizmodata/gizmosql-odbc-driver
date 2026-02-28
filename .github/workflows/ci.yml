@@ -474,6 +474,18 @@ jobs:
           gcc -o /tmp/test_metadata integration_tests/test_metadata.c -lodbc
           /tmp/test_metadata
 
+      - name: Run transaction integration tests
+        run: |
+          echo "=== Test 8: Transactions (SQLEndTran/autocommit) ==="
+          gcc -o /tmp/test_transactions integration_tests/test_transactions.c -lodbc
+          /tmp/test_transactions
+
+      - name: Run pyodbc integration tests
+        run: |
+          echo "=== Test 9: pyodbc integration ==="
+          pip3 install pyodbc
+          python3 integration_tests/test_pyodbc.py
+
   integration-test-linux-tls:
     needs: build-linux
     name: Integration Tests TLS (Linux x64)
@@ -877,42 +889,57 @@ jobs:
               end
             end
 
-            def caveats
+            def post_install
+              odbcinst_ini = etc/"odbcinst.ini"
+              driver_name = "GizmoSQL ODBC Driver"
+
               if OS.mac?
-                <<~EOS
-                  To register the driver, add the following to /usr/local/etc/odbcinst.ini:
-
-                    [GizmoSQL ODBC Driver]
-                    Driver = #{lib}/libgizmosql-odbc.dylib
-
-                  Then add a DSN to ~/.odbc.ini:
-
-                    [GizmoSQL]
-                    Driver        = GizmoSQL ODBC Driver
-                    host          = localhost
-                    port          = 32010
-                    uid           = your-username
-                    pwd           = your-password
-                    useEncryption = true
-                EOS
+                driver_path = lib/"libgizmosql-odbc.dylib"
               else
-                <<~EOS
-                  To register the driver, add the following to /etc/odbcinst.ini:
+                driver_path = lib/"libgizmosql-odbc.so"
+              end
 
-                    [GizmoSQL ODBC Driver]
-                    Driver = #{lib}/libgizmosql-odbc.so
+              if odbcinst_ini.exist?
+                contents = odbcinst_ini.read
+                if contents.include?("[#{driver_name}]")
+                  # Update existing driver entry with new path
+                  contents.gsub!(/(\[#{Regexp.escape(driver_name)}\]\s*\nDriver\s*=\s*).*/, "\\1#{driver_path}")
+                  odbcinst_ini.atomic_write(contents)
+                else
+                  # Append new driver entry to existing file
+                  odbcinst_ini.open("a") do |f|
+                    f.puts "" unless contents.end_with?("\n\n")
+                    f.puts "[ODBC Drivers]" unless contents.include?("[ODBC Drivers]")
+                    f.puts ""
+                    f.puts "[#{driver_name}]"
+                    f.puts "Driver = #{driver_path}"
+                  end
+                end
+              else
+                odbcinst_ini.write <<~EOS
+                  [ODBC Drivers]
+                  #{driver_name} = Installed
 
-                  Then add a DSN to ~/.odbc.ini:
-
-                    [GizmoSQL]
-                    Driver        = GizmoSQL ODBC Driver
-                    host          = localhost
-                    port          = 32010
-                    uid           = your-username
-                    pwd           = your-password
-                    useEncryption = true
+                  [#{driver_name}]
+                  Driver = #{driver_path}
                 EOS
               end
+            end
+
+            def caveats
+              <<~EOS
+                The driver has been registered automatically.
+
+                To create a DSN, add the following to ~/.odbc.ini:
+
+                  [GizmoSQL]
+                  Driver        = GizmoSQL ODBC Driver
+                  host          = localhost
+                  port          = 32010
+                  uid           = your-username
+                  pwd           = your-password
+                  useEncryption = true
+              EOS
             end
 
             test do

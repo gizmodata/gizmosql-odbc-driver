@@ -5,7 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Transaction support via `SQL_ATTR_AUTOCOMMIT` and `SQLEndTran`, using Flight SQL `BeginTransaction`/`Commit`/`Rollback` RPCs. pyodbc, SQLAlchemy, and other clients that set `SQL_AUTOCOMMIT_OFF` now work correctly. When autocommit is OFF, transactions begin implicitly on first statement execution and are committed/rolled back via `SQLEndTran`. Open transactions are rolled back on disconnect (ODBC spec §SQLDisconnect).
 - Add `defaultCatalog` connection property to specify which database/catalog to use at connection time. After authentication, the driver executes `USE <catalog>` to switch the server-side database and sets the ODBC `CURRENT_CATALOG` attribute. This allows Power BI and other ODBC clients to see tables from the correct database instead of the server's default (typically empty `memory`). The property is available in connection strings, DSN configuration UI, and DSN registry settings.
+- Homebrew formula now auto-registers the driver in `odbcinst.ini` via `post_install`, eliminating manual driver registration. Users only need to create a DSN in `~/.odbc.ini`.
+- pyodbc integration tests in CI verifying connection, transactions, commit, and rollback
 
 ### Fixed
 - Fix OAuth (`authType=external`) requiring browser re-authentication on every Power BI query: the bearer token obtained from the OAuth flow was stored only per-connection and discarded on close. Power BI DirectQuery creates a new connection for each query, triggering the full browser-based OAuth flow every time. Bearer tokens are now cached to a file and reused across connections and processes. On each new connection the driver validates the cached token with a lightweight `ListActions` RPC — if the token has expired or the signing key has rotated, the cache is automatically cleared and a fresh browser-based OAuth flow is triggered.
