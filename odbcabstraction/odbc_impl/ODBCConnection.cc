@@ -213,10 +213,10 @@ void ODBCConnection::GetInfo(SQLUSMALLINT infoType, SQLPOINTER value, SQLSMALLIN
       GetStringAttribute(isUnicode, "N", true, value, bufferLength, outputLength, GetDiagnostics());
       break;
     case SQL_TXN_CAPABLE:
-      GetAttribute(static_cast<SQLUSMALLINT>(SQL_TC_NONE), value, bufferLength, outputLength);
+      GetAttribute(static_cast<SQLUSMALLINT>(SQL_TC_ALL), value, bufferLength, outputLength);
       break;
     case SQL_TXN_ISOLATION_OPTION:
-      GetAttribute(static_cast<SQLUINTEGER>(0), value, bufferLength, outputLength);
+      GetAttribute(static_cast<SQLUINTEGER>(SQL_TXN_SERIALIZABLE), value, bufferLength, outputLength);
       break;
     case SQL_TABLE_TERM:
       GetStringAttribute(isUnicode, "table", true, value, bufferLength, outputLength, GetDiagnostics());
@@ -447,9 +447,11 @@ void ODBCConnection::SetConnectAttr(SQLINTEGER attribute, SQLPOINTER value, SQLI
 #endif
   case SQL_ATTR_AUTO_IPD:
     throw DriverException("Cannot set read-only attribute", "HY092");
-  case SQL_ATTR_AUTOCOMMIT:
-    CheckIfAttributeIsSetToOnlyValidValue(value, static_cast<SQLUINTEGER>(SQL_AUTOCOMMIT_ON));
+  case SQL_ATTR_AUTOCOMMIT: {
+    SQLUINTEGER val = static_cast<SQLUINTEGER>(reinterpret_cast<SQLULEN>(value));
+    m_spiConnection->SetAutoCommit(val == SQL_AUTOCOMMIT_ON);
     return;
+  }
   case SQL_ATTR_CONNECTION_DEAD:
     throw DriverException("Cannot set read-only attribute", "HY092");
 #ifdef SQL_ATTR_DBC_INFO_TOKEN
@@ -470,8 +472,13 @@ void ODBCConnection::SetConnectAttr(SQLINTEGER attribute, SQLPOINTER value, SQLI
     throw DriverException("Optional feature not supported.", "HYC00");
   case SQL_ATTR_TRANSLATE_OPTION:
     throw DriverException("Optional feature not supported.", "HYC00");
-  case SQL_ATTR_TXN_ISOLATION:
-    throw DriverException("Optional feature not supported.", "HYC00");
+  case SQL_ATTR_TXN_ISOLATION: {
+    SQLUINTEGER val = static_cast<SQLUINTEGER>(reinterpret_cast<SQLULEN>(value));
+    if (val != SQL_TXN_SERIALIZABLE) {
+      throw DriverException("Only SERIALIZABLE isolation is supported.", "HYC00");
+    }
+    return; // GizmoSQL only supports SERIALIZABLE — accept silently
+  }
 
   // ODBCAbstraction-level attributes
   case SQL_ATTR_CURRENT_CATALOG: {
@@ -567,7 +574,9 @@ void ODBCConnection::GetConnectAttr(SQLINTEGER attribute, SQLPOINTER value,
     GetAttribute(static_cast<SQLUINTEGER>(SQL_FALSE), value, bufferLength, outputLength);
     return;
   case SQL_ATTR_AUTOCOMMIT:
-    GetAttribute(static_cast<SQLUINTEGER>(SQL_AUTOCOMMIT_ON), value, bufferLength, outputLength);
+    GetAttribute(static_cast<SQLUINTEGER>(
+      m_spiConnection->GetAutoCommit() ? SQL_AUTOCOMMIT_ON : SQL_AUTOCOMMIT_OFF),
+      value, bufferLength, outputLength);
     return;
 #ifdef SQL_ATTR_DBC_INFO_TOKEN
   case SQL_ATTR_DBC_INFO_TOKEN:
@@ -590,7 +599,8 @@ void ODBCConnection::GetConnectAttr(SQLINTEGER attribute, SQLPOINTER value,
   case SQL_ATTR_TRANSLATE_OPTION:
     throw DriverException("Optional feature not supported.", "HYC00");
   case SQL_ATTR_TXN_ISOLATION:
-    throw DriverException("Optional feature not supported.", "HCY00");
+    GetAttribute(static_cast<SQLUINTEGER>(SQL_TXN_SERIALIZABLE), value, bufferLength, outputLength);
+    return;
 
   // ODBCAbstraction-level connection attributes.
   case SQL_ATTR_CURRENT_CATALOG:
@@ -630,6 +640,10 @@ void ODBCConnection::GetConnectAttr(SQLINTEGER attribute, SQLPOINTER value,
   }
 
   GetAttribute(static_cast<SQLUINTEGER>(boost::get<uint32_t>(*spiAttribute)), value, bufferLength, outputLength);
+}
+
+void ODBCConnection::EndTransaction(bool commit) {
+  m_spiConnection->EndTransaction(commit);
 }
 
 void ODBCConnection::disconnect() {

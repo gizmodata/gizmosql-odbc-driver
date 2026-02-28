@@ -41,6 +41,8 @@ private:
   odbcabstraction::Diagnostics diagnostics_;
   odbcabstraction::OdbcVersion odbc_version_;
   bool closed_;
+  bool autocommit_ = true;
+  arrow::flight::sql::Transaction transaction_{""};  // empty = no active txn
 
   void PopulateMetadataSettings(const Connection::ConnPropertyMap &connPropertyMap);
 
@@ -74,6 +76,16 @@ public:
   static const std::string DEFAULT_CATALOG;
 
   explicit FlightSqlConnection(odbcabstraction::OdbcVersion odbc_version, const std::string &driver_version = "0.9.0.0");
+
+  void SetAutoCommit(bool autocommit) override;
+  bool GetAutoCommit() const override;
+  void EndTransaction(bool commit) override;
+
+  /// \brief Return the current transaction (empty = no_transaction semantics).
+  const arrow::flight::sql::Transaction& GetCurrentTransaction() const;
+
+  /// \brief Begin a transaction implicitly if autocommit is OFF and no active txn.
+  void EnsureTransaction();
 
   void Connect(const ConnPropertyMap &properties,
                std::vector<std::string> &missing_attr) override;

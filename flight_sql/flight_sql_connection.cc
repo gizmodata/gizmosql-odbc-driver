@@ -191,10 +191,7 @@ void FlightSqlConnection::Connect(const ConnPropertyMap &properties,
       BuildFlightClientOptions(properties, missing_attr,
                                flight_ssl_configs);
 
-    const std::shared_ptr<arrow::flight::ClientMiddlewareFactory>
-        &cookie_factory = arrow::flight::GetCookieFactory();
-    client_options.middleware.push_back(cookie_factory);
-
+    // Cookie middleware is already added in BuildFlightClientOptions.
     // Conditionally add OAuth discovery middleware when authType=external
     std::shared_ptr<OAuthDiscoveryMiddlewareFactory> oauth_discovery;
     auto it_auth = properties.find(AUTH_TYPE);
@@ -477,6 +474,13 @@ void FlightSqlConnection::Close() {
     throw DriverException("Connection already closed.");
   }
 
+  // Rollback any open transaction before closing (ODBC spec §SQLDisconnect)
+  if (sql_client_ && transaction_.is_valid()) {
+    auto status = sql_client_->Rollback(call_options_, transaction_);
+    (void)status; // Best-effort; ignore errors on disconnect
+    transaction_ = arrow::flight::sql::Transaction("");
+  }
+
   if (sql_client_) {
     // Notify the server to close the session
     arrow::flight::CloseSessionRequest request;
@@ -489,13 +493,60 @@ void FlightSqlConnection::Close() {
   attribute_[CONNECTION_DEAD] = static_cast<uint32_t>(SQL_TRUE);
 }
 
+void FlightSqlConnection::SetAutoCommit(bool autocommit) {
+  if (autocommit == autocommit_) {
+    return; // No change
+  }
+
+  // Switching OFF → ON: implicitly commit any open transaction
+  if (autocommit && transaction_.is_valid()) {
+    ThrowIfNotOK(sql_client_->Commit(call_options_, transaction_));
+    transaction_ = arrow::flight::sql::Transaction("");
+  }
+
+  autocommit_ = autocommit;
+}
+
+bool FlightSqlConnection::GetAutoCommit() const {
+  return autocommit_;
+}
+
+void FlightSqlConnection::EndTransaction(bool commit) {
+  if (!transaction_.is_valid()) {
+    // No active transaction — nothing to do (ODBC spec allows this)
+    return;
+  }
+
+  if (commit) {
+    ThrowIfNotOK(sql_client_->Commit(call_options_, transaction_));
+  } else {
+    ThrowIfNotOK(sql_client_->Rollback(call_options_, transaction_));
+  }
+  transaction_ = arrow::flight::sql::Transaction("");
+}
+
+const arrow::flight::sql::Transaction& FlightSqlConnection::GetCurrentTransaction() const {
+  return transaction_;
+}
+
+void FlightSqlConnection::EnsureTransaction() {
+  if (autocommit_ || transaction_.is_valid()) {
+    return; // Autocommit mode or transaction already active
+  }
+
+  auto result = sql_client_->BeginTransaction(call_options_);
+  ThrowIfNotOK(result.status());
+  transaction_ = std::move(result).ValueUnsafe();
+}
+
 std::shared_ptr<Statement> FlightSqlConnection::CreateStatement() {
   return std::shared_ptr<Statement>(
       new FlightSqlStatement(
               diagnostics_,
               *sql_client_,
               call_options_,
-              metadata_settings_
+              metadata_settings_,
+              *this
               )
       );
 }

@@ -56,6 +56,8 @@ class ODBCConnection : public ODBCHandle<ODBCConnection> {
 
     void releaseConnection();
 
+    void EndTransaction(bool commit);
+
     ODBCEnvironment& GetEnvironment() { return m_environment; }
 
     std::shared_ptr<ODBCStatement> createStatement();

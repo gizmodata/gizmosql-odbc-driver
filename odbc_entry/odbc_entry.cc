@@ -711,20 +711,20 @@ SQLRETURN SQL_API SQLGetFunctions(SQLHDBC hDbc, SQLUSMALLINT functionId,
 
 SQLRETURN SQL_API SQLEndTran(SQLSMALLINT handleType, SQLHANDLE handle,
                             SQLSMALLINT completionType) {
-  if (completionType == SQL_COMMIT) {
-    return SQL_SUCCESS; // Auto-commit mode, no-op.
-  }
+  bool commit = (completionType == SQL_COMMIT);
 
-  // SQL_ROLLBACK — not supported
-  if (handleType == SQL_HANDLE_ENV) {
-    return ODBCEnvironment::ExecuteWithDiagnostics(
-        handle, SQL_ERROR, [&]() -> SQLRETURN {
-          throw DriverException("Transactions not supported", "HYC00");
+  if (handleType == SQL_HANDLE_DBC) {
+    return ODBCConnection::ExecuteWithDiagnostics(
+        handle, SQL_SUCCESS, [&]() -> SQLRETURN {
+          ODBCConnection::of(handle)->EndTransaction(commit);
+          return SQL_SUCCESS;
         });
   }
-  return ODBCConnection::ExecuteWithDiagnostics(
-      handle, SQL_ERROR, [&]() -> SQLRETURN {
-        throw DriverException("Transactions not supported", "HYC00");
+
+  // SQL_HANDLE_ENV — commit/rollback all connections (no-op for now)
+  return ODBCEnvironment::ExecuteWithDiagnostics(
+      handle, SQL_SUCCESS, [&]() -> SQLRETURN {
+        return SQL_SUCCESS;
       });
 }
 

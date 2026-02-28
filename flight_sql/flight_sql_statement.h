@@ -19,6 +19,8 @@
 namespace driver {
 namespace flight_sql {
 
+class FlightSqlConnection;
+
 class FlightSqlStatement : public odbcabstraction::Statement {
 
 private:
@@ -30,6 +32,7 @@ private:
   std::shared_ptr<arrow::flight::sql::PreparedStatement> prepared_statement_;
   std::shared_ptr<arrow::flight::FlightInfo> flight_info_;
   const odbcabstraction::MetadataSettings& metadata_settings_;
+  FlightSqlConnection& connection_;
   long update_count_ = -1;
 
   std::shared_ptr<odbcabstraction::ResultSet>
@@ -42,7 +45,8 @@ public:
       const odbcabstraction::Diagnostics &diagnostics,
       arrow::flight::sql::FlightSqlClient &sql_client,
       arrow::flight::FlightCallOptions call_options,
-      const odbcabstraction::MetadataSettings& metadata_settings);
+      const odbcabstraction::MetadataSettings& metadata_settings,
+      FlightSqlConnection& connection);
 
   ~FlightSqlStatement() override;
 

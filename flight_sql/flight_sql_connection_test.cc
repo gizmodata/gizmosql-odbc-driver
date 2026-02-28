@@ -194,5 +194,43 @@ TEST(PopulateCallOptionsTest, GenericOptionWithSpaces) {
   ASSERT_TRUE(headers.empty());
 }
 
+TEST(AutocommitTests, DefaultAutocommitOn) {
+  FlightSqlConnection connection(odbcabstraction::V_3);
+  EXPECT_TRUE(connection.GetAutoCommit());
+}
+
+TEST(AutocommitTests, SetAutocommitOff) {
+  FlightSqlConnection connection(odbcabstraction::V_3);
+  connection.SetClosed(false);
+
+  connection.SetAutoCommit(false);
+  EXPECT_FALSE(connection.GetAutoCommit());
+
+  // Setting to same value is a no-op
+  connection.SetAutoCommit(false);
+  EXPECT_FALSE(connection.GetAutoCommit());
+
+  connection.Close();
+}
+
+TEST(AutocommitTests, GetCurrentTransactionInvalid) {
+  FlightSqlConnection connection(odbcabstraction::V_3);
+
+  // When autocommit is ON, there should be no active transaction
+  const auto& txn = connection.GetCurrentTransaction();
+  EXPECT_FALSE(txn.is_valid());
+}
+
+TEST(AutocommitTests, EndTransactionNoOpWhenNoTransaction) {
+  FlightSqlConnection connection(odbcabstraction::V_3);
+  connection.SetClosed(false);
+
+  // EndTransaction with no active transaction should be a no-op (not throw)
+  connection.EndTransaction(true);
+  connection.EndTransaction(false);
+
+  connection.Close();
+}
+
 } // namespace flight_sql
 } // namespace driver

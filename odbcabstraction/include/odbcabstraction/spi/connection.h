@@ -80,6 +80,17 @@ public:
   /// \brief Retrieves info from the database (see ODBC's SQLGetInfo).
   virtual Info GetInfo(uint16_t info_type) = 0;
 
+  /// \brief Set the autocommit mode.
+  /// When switching from OFF to ON, any open transaction is committed.
+  virtual void SetAutoCommit(bool autocommit) = 0;
+
+  /// \brief Get the current autocommit mode.
+  virtual bool GetAutoCommit() const = 0;
+
+  /// \brief Commit or rollback the current transaction.
+  /// \param commit true to commit, false to rollback.
+  virtual void EndTransaction(bool commit) = 0;
+
   /// \brief Gets the diagnostics for this connection.
   /// \return the diagnostics
   virtual Diagnostics& GetDiagnostics() = 0;
