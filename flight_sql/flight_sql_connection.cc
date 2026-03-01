@@ -25,6 +25,7 @@
 #include <boost/optional.hpp>
 #include <odbcabstraction/exceptions.h>
 
+#include <fstream>
 #include <sql.h>
 #include <sqlext.h>
 
@@ -123,7 +124,28 @@ inline std::string GetCerts() {
 #else
 
 constexpr auto SYSTEM_TRUST_STORE_DEFAULT = false;
+
+/// Well-known system CA bundle paths on macOS and Linux.
+/// gRPC's compiled-in default (/usr/share/grpc/roots.pem) doesn't exist on
+/// macOS, so we probe these paths and load the first one that exists.
+static const std::vector<std::string> SYSTEM_CA_PATHS = {
+#ifdef __APPLE__
+    "/etc/ssl/cert.pem",                        // macOS (LibreSSL bundle)
+#endif
+    "/etc/ssl/certs/ca-certificates.crt",       // Debian / Ubuntu
+    "/etc/pki/tls/certs/ca-bundle.crt",         // RHEL / Fedora / CentOS
+    "/etc/ssl/ca-bundle.pem",                    // openSUSE
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // RHEL 7+
+};
+
 inline std::string GetCerts() {
+  for (const auto &path : SYSTEM_CA_PATHS) {
+    std::ifstream file(path);
+    if (file.good()) {
+      return std::string(std::istreambuf_iterator<char>(file),
+                         std::istreambuf_iterator<char>());
+    }
+  }
   return "";
 }
 
@@ -407,6 +429,14 @@ FlightSqlConnection::BuildFlightClientOptions(const ConnPropertyMap &properties,
         flight::CertKeyPair cert_key_pair;
         ssl_config->populateOptionsWithCerts(&cert_key_pair);
         options.tls_root_certs = cert_key_pair.pem_cert;
+      } else {
+        // Fallback: probe well-known system CA bundle paths.
+        // gRPC's compiled-in default (/usr/share/grpc/roots.pem) doesn't
+        // exist on macOS; loading system certs explicitly avoids that.
+        const std::string certs = GetCerts();
+        if (!certs.empty()) {
+          options.tls_root_certs = certs;
+        }
       }
     }
   }

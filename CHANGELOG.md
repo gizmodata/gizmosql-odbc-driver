@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Fix TLS connections failing on macOS with `load_file: /usr/share/grpc/roots.pem: No such file or directory`: statically-linked gRPC defaults to a root CA bundle path that doesn't exist on macOS. The driver now probes well-known system CA bundle paths (`/etc/ssl/cert.pem` on macOS, `/etc/ssl/certs/ca-certificates.crt` on Debian/Ubuntu, etc.) and loads certificates automatically when no explicit `trustedCerts` or `useSystemTrustStore` is configured. Users no longer need to set `GRPC_DEFAULT_SSL_ROOTS_FILE_PATH` or `trustedCerts` for standard TLS connections.
+
 ## [v1.1.0] - 2026-02-28
 
 ### Added

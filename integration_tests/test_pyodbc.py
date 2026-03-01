@@ -18,13 +18,24 @@ import pyodbc
 pyodbc.pooling = False
 
 DRIVER_PATH = os.environ.get("GIZMOSQL_DRIVER", "/tmp/libgizmosql-odbc.so")
+HOST = os.environ.get("GIZMOSQL_HOST", "localhost")
+PORT = os.environ.get("GIZMOSQL_PORT", "31337")
+UID = os.environ.get("GIZMOSQL_UID", "gizmosql_user")
+PWD = os.environ.get("GIZMOSQL_PWD", "gizmosql_password")
+USE_ENCRYPTION = os.environ.get("GIZMOSQL_USE_ENCRYPTION", "false")
+DISABLE_CERT_VERIFY = os.environ.get("GIZMOSQL_DISABLE_CERT_VERIFICATION", "")
+
 CONN_STR = (
     f"Driver={DRIVER_PATH};"
-    "host=localhost;port=31337;"
-    "uid=gizmosql_user;pwd=gizmosql_password;"
-    "useEncryption=false;"
+    f"host={HOST};port={PORT};"
+    f"uid={UID};pwd={PWD};"
+    f"useEncryption={USE_ENCRYPTION};"
     "defaultCatalog=test"
 )
+if DISABLE_CERT_VERIFY:
+    CONN_STR += f";disableCertificateVerification={DISABLE_CERT_VERIFY}"
+
+print(f"Connection string: Driver={DRIVER_PATH};host={HOST};port={PORT};useEncryption={USE_ENCRYPTION}")
 
 passed = 0
 failed = 0

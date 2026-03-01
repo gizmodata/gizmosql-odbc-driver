@@ -584,8 +584,200 @@ jobs:
 
           echo "=== All TLS integration tests passed ==="
 
-  sign-macos:
+      - name: Run pyodbc TLS integration tests
+        env:
+          GIZMOSQL_USE_ENCRYPTION: "true"
+          GIZMOSQL_DISABLE_CERT_VERIFICATION: "true"
+        run: |
+          echo "=== pyodbc TLS integration tests ==="
+          pip3 install pyodbc
+          python3 integration_tests/test_pyodbc.py
+
+  integration-test-macos:
     needs: build-macos
+    name: Integration Tests (macOS arm64)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GizmoSQL server and pyodbc
+        run: |
+          brew install gizmodata/tap/gizmosql unixodbc
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install pyodbc
+
+      - name: Download driver artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: libgizmosql-odbc-macos-arm64.dylib
+          path: driver
+
+      - name: Install driver
+        run: |
+          DRIVER_PATH=$(find driver -name '*.dylib' -print -quit)
+          cp "$DRIVER_PATH" /tmp/libgizmosql-odbc.dylib
+          chmod +x /tmp/libgizmosql-odbc.dylib
+
+      - name: Start GizmoSQL (non-TLS)
+        run: |
+          GIZMOSQL_PASSWORD=gizmosql_password gizmosql_server \
+            --database-filename /tmp/test.duckdb \
+            --username gizmosql_user \
+            --print-queries &
+          echo $! > /tmp/gizmosql.pid
+          for i in $(seq 1 30); do
+            nc -z localhost 31337 && echo "GizmoSQL is ready" && exit 0
+            echo "Waiting for GizmoSQL... ($i/30)"
+            sleep 2
+          done
+          echo "GizmoSQL did not start in time" && exit 1
+
+      - name: Run pyodbc integration tests (non-TLS)
+        env:
+          GIZMOSQL_DRIVER: /tmp/libgizmosql-odbc.dylib
+        run: /tmp/venv/bin/python integration_tests/test_pyodbc.py
+
+      - name: Stop non-TLS server
+        run: kill $(cat /tmp/gizmosql.pid) && sleep 1
+
+      - name: Generate TLS certificate
+        run: |
+          openssl req -x509 -newkey rsa:2048 \
+            -keyout /tmp/server.key -out /tmp/server.crt \
+            -days 1 -nodes -subj "/CN=localhost"
+
+      - name: Start GizmoSQL (TLS)
+        run: |
+          GIZMOSQL_PASSWORD=gizmosql_password gizmosql_server \
+            --database-filename /tmp/test_tls.duckdb \
+            --username gizmosql_user \
+            --tls /tmp/server.crt /tmp/server.key \
+            --print-queries &
+          echo $! > /tmp/gizmosql_tls.pid
+          for i in $(seq 1 30); do
+            nc -z localhost 31337 && echo "GizmoSQL TLS is ready" && exit 0
+            echo "Waiting for GizmoSQL TLS... ($i/30)"
+            sleep 2
+          done
+          echo "GizmoSQL TLS did not start in time" && exit 1
+
+      - name: Run pyodbc TLS integration tests
+        env:
+          GIZMOSQL_DRIVER: /tmp/libgizmosql-odbc.dylib
+          GIZMOSQL_USE_ENCRYPTION: "true"
+          GIZMOSQL_DISABLE_CERT_VERIFICATION: "true"
+        run: /tmp/venv/bin/python integration_tests/test_pyodbc.py
+
+  integration-test-windows:
+    needs: build-windows
+    name: Integration Tests (Windows x64)
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GizmoSQL server
+        shell: pwsh
+        run: |
+          # Download latest GizmoSQL MSI from GitHub releases
+          gh release download --repo gizmodata/gizmosql --pattern "GizmoSQL-amd64.msi" --dir $env:RUNNER_TEMP
+          # Install silently
+          Start-Process msiexec.exe -ArgumentList "/i `"$env:RUNNER_TEMP\GizmoSQL-amd64.msi`" /quiet /norestart" -Wait -NoNewWindow
+          # MSI adds to PATH but current session doesn't pick it up — add explicitly
+          $env:PATH = "C:\Program Files\GizmoSQL;$env:PATH"
+          echo "PATH=C:\Program Files\GizmoSQL;$env:PATH" >> $env:GITHUB_ENV
+          # Verify install
+          gizmosql_server --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Download driver artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: gizmosql-odbc-windows-x64.dll
+          path: driver
+
+      - name: Install driver
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Path driver -Filter gizmosql-odbc.dll -Recurse | Select-Object -First 1
+          Copy-Item $dll.FullName "C:\gizmosql-odbc.dll"
+          # Register driver in ODBC
+          New-Item -Path "HKLM:\SOFTWARE\ODBC\ODBCINST.INI\GizmoSQL ODBC Driver" -Force | Out-Null
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\ODBC\ODBCINST.INI\GizmoSQL ODBC Driver" -Name "Driver" -Value "C:\gizmosql-odbc.dll"
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\ODBC\ODBCINST.INI\GizmoSQL ODBC Driver" -Name "Setup" -Value "C:\gizmosql-odbc.dll"
+          # Add to installed drivers list
+          New-Item -Path "HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers" -Force | Out-Null
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers" -Name "GizmoSQL ODBC Driver" -Value "Installed"
+
+      - name: Start GizmoSQL (non-TLS)
+        shell: pwsh
+        run: |
+          $env:GIZMOSQL_PASSWORD = "gizmosql_password"
+          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--print-queries" -NoNewWindow -PassThru | ForEach-Object { $_.Id | Out-File C:\gizmosql.pid }
+          # Wait for server
+          for ($i = 1; $i -le 30; $i++) {
+            try {
+              $tcp = New-Object System.Net.Sockets.TcpClient("localhost", 31337)
+              $tcp.Close()
+              Write-Host "GizmoSQL is ready"
+              break
+            } catch {
+              Write-Host "Waiting for GizmoSQL... ($i/30)"
+              Start-Sleep -Seconds 2
+            }
+          }
+
+      - name: Run pyodbc integration tests (non-TLS)
+        shell: pwsh
+        env:
+          GIZMOSQL_DRIVER: C:\gizmosql-odbc.dll
+        run: |
+          pip install pyodbc
+          python integration_tests/test_pyodbc.py
+
+      - name: Stop non-TLS server
+        shell: pwsh
+        run: |
+          $pid = Get-Content C:\gizmosql.pid
+          Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 1
+
+      - name: Generate TLS certificate
+        shell: pwsh
+        run: |
+          # Use openssl from Git for Windows
+          $openssl = "C:\Program Files\Git\usr\bin\openssl.exe"
+          & $openssl req -x509 -newkey rsa:2048 -keyout C:\server.key -out C:\server.crt -days 1 -nodes -subj "/CN=localhost"
+
+      - name: Start GizmoSQL (TLS)
+        shell: pwsh
+        run: |
+          $env:GIZMOSQL_PASSWORD = "gizmosql_password"
+          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test_tls.duckdb","--username","gizmosql_user","--tls","C:\server.crt","C:\server.key","--print-queries" -NoNewWindow -PassThru | ForEach-Object { $_.Id | Out-File C:\gizmosql_tls.pid }
+          for ($i = 1; $i -le 30; $i++) {
+            try {
+              $tcp = New-Object System.Net.Sockets.TcpClient("localhost", 31337)
+              $tcp.Close()
+              Write-Host "GizmoSQL TLS is ready"
+              break
+            } catch {
+              Write-Host "Waiting for GizmoSQL TLS... ($i/30)"
+              Start-Sleep -Seconds 2
+            }
+          }
+
+      - name: Run pyodbc TLS integration tests
+        shell: pwsh
+        env:
+          GIZMOSQL_DRIVER: C:\gizmosql-odbc.dll
+          GIZMOSQL_USE_ENCRYPTION: "true"
+          GIZMOSQL_DISABLE_CERT_VERIFICATION: "true"
+        run: python integration_tests/test_pyodbc.py
+
+  sign-macos:
+    needs: [build-macos, integration-test-macos]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
     name: Sign macOS (arm64)
@@ -621,7 +813,7 @@ jobs:
           if-no-files-found: error
 
   sign-windows:
-    needs: build-windows
+    needs: [build-windows, integration-test-windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     name: Sign Windows (x64)
@@ -780,7 +972,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [build-linux, build-macos, build-windows, sign-macos, sign-windows, build-msi, integration-test-linux, integration-test-linux-tls]
+    needs: [build-linux, build-macos, build-windows, sign-macos, sign-windows, build-msi, integration-test-linux, integration-test-linux-tls, integration-test-macos, integration-test-windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     name: Release
