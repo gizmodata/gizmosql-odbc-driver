@@ -734,10 +734,11 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path "C:\temp" -Force | Out-Null
+          # Set password in PowerShell env so it's inherited by Start-Process.
           # Use cmd /c with -WindowStyle Hidden so the server gets its own console
           # and isn't killed when this GitHub Actions step's PowerShell exits.
-          # Shell-level redirection captures all output to a log file.
-          $proc = Start-Process cmd -ArgumentList '/c', "set GIZMOSQL_PASSWORD=gizmosql_password && gizmosql_server --database-filename C:\temp\test.duckdb --username gizmosql_user --log-level debug --print-queries > C:\gizmosql.log 2>&1" -WindowStyle Hidden -PassThru
+          $env:GIZMOSQL_PASSWORD = "gizmosql_password"
+          $proc = Start-Process cmd -ArgumentList '/c', "gizmosql_server --database-filename C:\temp\test.duckdb --username gizmosql_user --log-level debug --print-queries > C:\gizmosql.log 2>&1" -WindowStyle Hidden -PassThru
           $proc.Id | Out-File C:\gizmosql.pid
           Write-Host "Started server wrapper PID: $($proc.Id)"
           # Wait for server — use 127.0.0.1 to avoid IPv6 issues
@@ -830,7 +831,8 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $proc = Start-Process cmd -ArgumentList '/c', "set GIZMOSQL_PASSWORD=gizmosql_password && gizmosql_server --database-filename C:\temp\test.duckdb --username gizmosql_user --tls C:\server.crt C:\server.key --log-level debug --print-queries > C:\gizmosql_tls.log 2>&1" -WindowStyle Hidden -PassThru
+          $env:GIZMOSQL_PASSWORD = "gizmosql_password"
+          $proc = Start-Process cmd -ArgumentList '/c', "gizmosql_server --database-filename C:\temp\test.duckdb --username gizmosql_user --tls C:\server.crt C:\server.key --log-level debug --print-queries > C:\gizmosql_tls.log 2>&1" -WindowStyle Hidden -PassThru
           $proc.Id | Out-File C:\gizmosql_tls.pid
           for ($i = 1; $i -le 30; $i++) {
             try {
