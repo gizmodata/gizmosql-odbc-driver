@@ -749,9 +749,9 @@ jobs:
             }
           }
           # Verify server process is running
-          $pid = Get-Content C:\gizmosql.pid
-          $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
-          if ($proc) { Write-Host "Server PID $pid is running" } else { Write-Host "WARNING: Server PID $pid is NOT running!" }
+          $server_pid = Get-Content C:\gizmosql.pid
+          $proc = Get-Process -Id $server_pid -ErrorAction SilentlyContinue
+          if ($proc) { Write-Host "Server PID $server_pid is running" } else { Write-Host "WARNING: Server PID $server_pid is NOT running!" }
 
       - name: Run pyodbc integration tests (non-TLS)
         shell: pwsh
@@ -760,9 +760,35 @@ jobs:
           GIZMOSQL_HOST: "127.0.0.1"
           PYTHONUNBUFFERED: "1"
         run: |
-          pip install pyodbc
-          # Quick ODBC diagnostic — try minimal connection without defaultCatalog
-          python -c "import pyodbc; pyodbc.pooling = False; print('Drivers:', [d for d in pyodbc.drivers()]); conn = pyodbc.connect('Driver={GizmoSQL ODBC Driver};host=127.0.0.1;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false', autocommit=True, timeout=10); print('Connected!'); cursor = conn.cursor(); cursor.execute('SELECT 42'); print('Result:', cursor.fetchone()); conn.close()" || echo "DIAG: Quick test failed (without defaultCatalog)"
+          pip install pyodbc grpcio grpcio-tools pyarrow
+          # Test 1: Raw gRPC channel connectivity (bypass ODBC driver entirely)
+          python -c "
+          import grpc
+          print('Testing raw gRPC channel to 127.0.0.1:31337...')
+          channel = grpc.insecure_channel('127.0.0.1:31337')
+          try:
+              grpc.channel_ready_future(channel).result(timeout=5)
+              print('gRPC channel: READY')
+          except Exception as e:
+              print(f'gRPC channel FAILED: {e}')
+          channel.close()
+          " || echo "DIAG: Raw gRPC test failed"
+          # Test 2: Arrow Flight client connectivity (bypass ODBC, test Flight directly)
+          python -c "
+          import pyarrow.flight as flight
+          print('Testing Arrow Flight client to grpc+tcp://127.0.0.1:31337...')
+          try:
+              client = flight.connect('grpc+tcp://127.0.0.1:31337')
+              result = client.authenticate_basic_token('gizmosql_user', 'gizmosql_password')
+              print(f'Flight auth: SUCCESS, token type: {result[0]}')
+              info = client.get_flight_info(flight.FlightDescriptor.for_command(b'SELECT 42'))
+              print(f'Flight query: SUCCESS, endpoints: {len(info.endpoints)}')
+              client.close()
+          except Exception as e:
+              print(f'Flight client FAILED: {e}')
+          " || echo "DIAG: Flight client test failed"
+          # Test 3: ODBC driver
+          python -c "import pyodbc; pyodbc.pooling = False; print('Drivers:', [d for d in pyodbc.drivers()]); conn = pyodbc.connect('Driver={GizmoSQL ODBC Driver};host=127.0.0.1;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false', autocommit=True, timeout=10); print('Connected!'); cursor = conn.cursor(); cursor.execute('SELECT 42'); print('Result:', cursor.fetchone()); conn.close()" || echo "DIAG: ODBC test failed"
           python integration_tests/test_pyodbc.py
 
       - name: Dump server logs (non-TLS)
@@ -775,9 +801,9 @@ jobs:
           if (Test-Path C:\gizmosql_stderr.log) { Get-Content C:\gizmosql_stderr.log -Tail 100 } else { Write-Host "No stderr log" }
           # Check if server is still running
           if (Test-Path C:\gizmosql.pid) {
-            $pid = Get-Content C:\gizmosql.pid
-            $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
-            if ($proc) { Write-Host "Server PID $pid still running" } else { Write-Host "Server PID $pid has EXITED" }
+            $server_pid = Get-Content C:\gizmosql.pid
+            $proc = Get-Process -Id $server_pid -ErrorAction SilentlyContinue
+            if ($proc) { Write-Host "Server PID $server_pid still running" } else { Write-Host "Server PID $server_pid has EXITED" }
           }
 
       - name: Stop non-TLS server
@@ -785,8 +811,8 @@ jobs:
         shell: pwsh
         run: |
           if (Test-Path C:\gizmosql.pid) {
-            $pid = Get-Content C:\gizmosql.pid
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            $server_pid = Get-Content C:\gizmosql.pid
+            Stop-Process -Id $server_pid -Force -ErrorAction SilentlyContinue
           }
           Start-Sleep -Seconds 1
 
