@@ -165,6 +165,7 @@ jobs:
             vcpkg-x64-windows-static-md-
 
       - name: Install dependencies
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
         run: |
           & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet x64-windows-static-md --clean-after-build --x-install-root="$env:VCPKG_ROOT\installed"
 
