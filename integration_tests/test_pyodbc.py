@@ -24,6 +24,7 @@ UID = os.environ.get("GIZMOSQL_UID", "gizmosql_user")
 PWD = os.environ.get("GIZMOSQL_PWD", "gizmosql_password")
 USE_ENCRYPTION = os.environ.get("GIZMOSQL_USE_ENCRYPTION", "false")
 DISABLE_CERT_VERIFY = os.environ.get("GIZMOSQL_DISABLE_CERT_VERIFICATION", "")
+TRUSTED_CERTS = os.environ.get("GIZMOSQL_TRUSTED_CERTS", "")
 
 CONN_STR = (
     f"Driver={DRIVER_PATH};"
@@ -34,6 +35,8 @@ CONN_STR = (
 )
 if DISABLE_CERT_VERIFY:
     CONN_STR += f";disableCertificateVerification={DISABLE_CERT_VERIFY}"
+if TRUSTED_CERTS:
+    CONN_STR += f";trustedCerts={TRUSTED_CERTS}"
 
 print(f"Connection string: Driver={DRIVER_PATH};host={HOST};port={PORT};useEncryption={USE_ENCRYPTION}")
 

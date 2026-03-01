@@ -673,7 +673,7 @@ jobs:
         env:
           GIZMOSQL_DRIVER: /tmp/libgizmosql-odbc.dylib
           GIZMOSQL_USE_ENCRYPTION: "true"
-          GIZMOSQL_DISABLE_CERT_VERIFICATION: "true"
+          GIZMOSQL_TRUSTED_CERTS: /tmp/server.crt
         run: /tmp/venv/bin/python integration_tests/test_pyodbc.py
 
   integration-test-windows:
@@ -780,7 +780,7 @@ jobs:
         env:
           GIZMOSQL_DRIVER: C:\gizmosql-odbc.dll
           GIZMOSQL_USE_ENCRYPTION: "true"
-          GIZMOSQL_DISABLE_CERT_VERIFICATION: "true"
+          GIZMOSQL_TRUSTED_CERTS: C:\server.crt
         run: python integration_tests/test_pyodbc.py
 
   sign-macos:
