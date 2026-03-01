@@ -733,12 +733,13 @@ jobs:
       - name: Start GizmoSQL (non-TLS)
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Path "C:\temp" -Force | Out-Null
           $env:GIZMOSQL_PASSWORD = "gizmosql_password"
-          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--print-queries" -NoNewWindow -PassThru | ForEach-Object { $_.Id | Out-File C:\gizmosql.pid }
-          # Wait for server
+          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--log-level","debug","--print-queries" -NoNewWindow -PassThru | ForEach-Object { $_.Id | Out-File C:\gizmosql.pid }
+          # Wait for server — use 127.0.0.1 to avoid IPv6 issues
           for ($i = 1; $i -le 30; $i++) {
             try {
-              $tcp = New-Object System.Net.Sockets.TcpClient("localhost", 31337)
+              $tcp = New-Object System.Net.Sockets.TcpClient("127.0.0.1", 31337)
               $tcp.Close()
               Write-Host "GizmoSQL is ready"
               break
@@ -752,8 +753,12 @@ jobs:
         shell: pwsh
         env:
           GIZMOSQL_DRIVER: "{GizmoSQL ODBC Driver}"
+          GIZMOSQL_HOST: "127.0.0.1"
+          PYTHONUNBUFFERED: "1"
         run: |
           pip install pyodbc
+          # Quick ODBC diagnostic
+          python -c "import pyodbc; pyodbc.pooling = False; print('Drivers:', [d for d in pyodbc.drivers()]); conn = pyodbc.connect('Driver={GizmoSQL ODBC Driver};host=127.0.0.1;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false', autocommit=True, timeout=10); print('Connected!'); cursor = conn.cursor(); cursor.execute('SELECT 42'); print('Result:', cursor.fetchone()); conn.close()" || echo "DIAG: Quick test failed"
           python integration_tests/test_pyodbc.py
 
       - name: Stop non-TLS server
@@ -774,10 +779,10 @@ jobs:
         shell: pwsh
         run: |
           $env:GIZMOSQL_PASSWORD = "gizmosql_password"
-          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--tls","C:\server.crt","C:\server.key","--print-queries" -NoNewWindow -PassThru | ForEach-Object { $_.Id | Out-File C:\gizmosql_tls.pid }
+          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--tls","C:\server.crt","C:\server.key","--log-level","debug","--print-queries" -NoNewWindow -PassThru | ForEach-Object { $_.Id | Out-File C:\gizmosql_tls.pid }
           for ($i = 1; $i -le 30; $i++) {
             try {
-              $tcp = New-Object System.Net.Sockets.TcpClient("localhost", 31337)
+              $tcp = New-Object System.Net.Sockets.TcpClient("127.0.0.1", 31337)
               $tcp.Close()
               Write-Host "GizmoSQL TLS is ready"
               break
@@ -792,8 +797,10 @@ jobs:
         shell: pwsh
         env:
           GIZMOSQL_DRIVER: "{GizmoSQL ODBC Driver}"
+          GIZMOSQL_HOST: "127.0.0.1"
           GIZMOSQL_USE_ENCRYPTION: "true"
           GIZMOSQL_TRUSTED_CERTS: C:\server.crt
+          PYTHONUNBUFFERED: "1"
         run: python integration_tests/test_pyodbc.py
 
   sign-macos:
