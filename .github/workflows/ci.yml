@@ -672,7 +672,12 @@ jobs:
 
       - name: Verify TLS handshake
         run: |
-          echo | openssl s_client -connect localhost:31337 -servername localhost 2>&1 | head -20
+          echo "=== Certificate details ==="
+          openssl x509 -in /tmp/server.crt -text -noout | head -30
+          echo "=== TLS connection test ==="
+          echo | openssl s_client -connect localhost:31337 -servername localhost 2>&1 | head -30
+          echo "=== Server process ==="
+          ps aux | grep gizmosql_server | grep -v grep
 
       - name: Run pyodbc TLS integration tests
         timeout-minutes: 3
@@ -680,6 +685,9 @@ jobs:
           GIZMOSQL_DRIVER: /tmp/libgizmosql-odbc.dylib
           GIZMOSQL_USE_ENCRYPTION: "true"
           GIZMOSQL_TRUSTED_CERTS: /tmp/server.crt
+          GRPC_VERBOSITY: info
+          GRPC_TRACE: secure_endpoint,handshaker
+          PYTHONUNBUFFERED: "1"
         run: /tmp/venv/bin/python integration_tests/test_pyodbc.py
 
   integration-test-windows:
