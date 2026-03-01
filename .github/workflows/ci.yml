@@ -658,7 +658,7 @@ jobs:
       - name: Start GizmoSQL (TLS)
         run: |
           GIZMOSQL_PASSWORD=gizmosql_password gizmosql_server \
-            --database-filename /tmp/test_tls.duckdb \
+            --database-filename /tmp/test.duckdb \
             --username gizmosql_user \
             --tls /tmp/server.crt /tmp/server.key \
             --print-queries &
@@ -685,9 +685,6 @@ jobs:
           GIZMOSQL_DRIVER: /tmp/libgizmosql-odbc.dylib
           GIZMOSQL_USE_ENCRYPTION: "true"
           GIZMOSQL_TRUSTED_CERTS: /tmp/server.crt
-          GRPC_VERBOSITY: info
-          GRPC_TRACE: secure_endpoint,handshaker
-          PYTHONUNBUFFERED: "1"
         run: /tmp/venv/bin/python integration_tests/test_pyodbc.py
 
   integration-test-windows:
@@ -776,7 +773,7 @@ jobs:
         shell: pwsh
         run: |
           $env:GIZMOSQL_PASSWORD = "gizmosql_password"
-          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test_tls.duckdb","--username","gizmosql_user","--tls","C:\server.crt","C:\server.key","--print-queries" -NoNewWindow -PassThru | ForEach-Object { $_.Id | Out-File C:\gizmosql_tls.pid }
+          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--tls","C:\server.crt","C:\server.key","--print-queries" -NoNewWindow -PassThru | ForEach-Object { $_.Id | Out-File C:\gizmosql_tls.pid }
           for ($i = 1; $i -le 30; $i++) {
             try {
               $tcp = New-Object System.Net.Sockets.TcpClient("localhost", 31337)
