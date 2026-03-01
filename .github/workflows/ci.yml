@@ -734,8 +734,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path "C:\temp" -Force | Out-Null
-          $env:GIZMOSQL_PASSWORD = "gizmosql_password"
-          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--log-level","debug","--print-queries" -NoNewWindow -PassThru -RedirectStandardOutput "C:\gizmosql_stdout.log" -RedirectStandardError "C:\gizmosql_stderr.log" | ForEach-Object { $_.Id | Out-File C:\gizmosql.pid }
+          # Use cmd /c with -WindowStyle Hidden so the server gets its own console
+          # and isn't killed when this GitHub Actions step's PowerShell exits.
+          # Shell-level redirection captures all output to a log file.
+          $proc = Start-Process cmd -ArgumentList '/c', "set GIZMOSQL_PASSWORD=gizmosql_password && gizmosql_server --database-filename C:\temp\test.duckdb --username gizmosql_user --log-level debug --print-queries > C:\gizmosql.log 2>&1" -WindowStyle Hidden -PassThru
+          $proc.Id | Out-File C:\gizmosql.pid
+          Write-Host "Started server wrapper PID: $($proc.Id)"
           # Wait for server — use 127.0.0.1 to avoid IPv6 issues
           for ($i = 1; $i -le 30; $i++) {
             try {
@@ -795,10 +799,8 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Write-Host "=== Server stdout ==="
-          if (Test-Path C:\gizmosql_stdout.log) { Get-Content C:\gizmosql_stdout.log -Tail 100 } else { Write-Host "No stdout log" }
-          Write-Host "=== Server stderr ==="
-          if (Test-Path C:\gizmosql_stderr.log) { Get-Content C:\gizmosql_stderr.log -Tail 100 } else { Write-Host "No stderr log" }
+          Write-Host "=== Server log ==="
+          if (Test-Path C:\gizmosql.log) { Get-Content C:\gizmosql.log -Tail 100 } else { Write-Host "No server log" }
           # Check if server is still running
           if (Test-Path C:\gizmosql.pid) {
             $server_pid = Get-Content C:\gizmosql.pid
@@ -828,8 +830,8 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $env:GIZMOSQL_PASSWORD = "gizmosql_password"
-          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--tls","C:\server.crt","C:\server.key","--log-level","debug","--print-queries" -NoNewWindow -PassThru -RedirectStandardOutput "C:\gizmosql_tls_stdout.log" -RedirectStandardError "C:\gizmosql_tls_stderr.log" | ForEach-Object { $_.Id | Out-File C:\gizmosql_tls.pid }
+          $proc = Start-Process cmd -ArgumentList '/c', "set GIZMOSQL_PASSWORD=gizmosql_password && gizmosql_server --database-filename C:\temp\test.duckdb --username gizmosql_user --tls C:\server.crt C:\server.key --log-level debug --print-queries > C:\gizmosql_tls.log 2>&1" -WindowStyle Hidden -PassThru
+          $proc.Id | Out-File C:\gizmosql_tls.pid
           for ($i = 1; $i -le 30; $i++) {
             try {
               $tcp = New-Object System.Net.Sockets.TcpClient("127.0.0.1", 31337)
@@ -858,10 +860,8 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Write-Host "=== TLS Server stdout ==="
-          if (Test-Path C:\gizmosql_tls_stdout.log) { Get-Content C:\gizmosql_tls_stdout.log -Tail 100 } else { Write-Host "No TLS stdout log" }
-          Write-Host "=== TLS Server stderr ==="
-          if (Test-Path C:\gizmosql_tls_stderr.log) { Get-Content C:\gizmosql_tls_stderr.log -Tail 100 } else { Write-Host "No TLS stderr log" }
+          Write-Host "=== TLS Server log ==="
+          if (Test-Path C:\gizmosql_tls.log) { Get-Content C:\gizmosql_tls.log -Tail 100 } else { Write-Host "No TLS server log" }
 
   sign-macos:
     needs: [build-macos, integration-test-macos]
