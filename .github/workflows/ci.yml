@@ -652,7 +652,8 @@ jobs:
         run: |
           openssl req -x509 -newkey rsa:2048 \
             -keyout /tmp/server.key -out /tmp/server.crt \
-            -days 1 -nodes -subj "/CN=localhost"
+            -days 1 -nodes -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 
       - name: Start GizmoSQL (TLS)
         run: |
@@ -669,7 +670,12 @@ jobs:
           done
           echo "GizmoSQL TLS did not start in time" && exit 1
 
+      - name: Verify TLS handshake
+        run: |
+          echo | openssl s_client -connect localhost:31337 -servername localhost 2>&1 | head -20
+
       - name: Run pyodbc TLS integration tests
+        timeout-minutes: 3
         env:
           GIZMOSQL_DRIVER: /tmp/libgizmosql-odbc.dylib
           GIZMOSQL_USE_ENCRYPTION: "true"
@@ -756,7 +762,7 @@ jobs:
         run: |
           # Use openssl from Git for Windows
           $openssl = "C:\Program Files\Git\usr\bin\openssl.exe"
-          & $openssl req -x509 -newkey rsa:2048 -keyout C:\server.key -out C:\server.crt -days 1 -nodes -subj "/CN=localhost"
+          & $openssl req -x509 -newkey rsa:2048 -keyout C:\server.key -out C:\server.crt -days 1 -nodes -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 
       - name: Start GizmoSQL (TLS)
         shell: pwsh
@@ -776,6 +782,7 @@ jobs:
           }
 
       - name: Run pyodbc TLS integration tests
+        timeout-minutes: 3
         shell: pwsh
         env:
           GIZMOSQL_DRIVER: C:\gizmosql-odbc.dll
