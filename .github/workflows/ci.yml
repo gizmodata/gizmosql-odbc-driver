@@ -750,7 +750,7 @@ jobs:
       - name: Run pyodbc integration tests (non-TLS)
         shell: pwsh
         env:
-          GIZMOSQL_DRIVER: C:\gizmosql-odbc.dll
+          GIZMOSQL_DRIVER: "{GizmoSQL ODBC Driver}"
         run: |
           pip install pyodbc
           python integration_tests/test_pyodbc.py
@@ -790,7 +790,7 @@ jobs:
         timeout-minutes: 3
         shell: pwsh
         env:
-          GIZMOSQL_DRIVER: C:\gizmosql-odbc.dll
+          GIZMOSQL_DRIVER: "{GizmoSQL ODBC Driver}"
           GIZMOSQL_USE_ENCRYPTION: "true"
           GIZMOSQL_TRUSTED_CERTS: C:\server.crt
         run: python integration_tests/test_pyodbc.py
