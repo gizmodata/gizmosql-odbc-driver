@@ -419,24 +419,25 @@ FlightSqlConnection::BuildFlightClientOptions(const ConnPropertyMap &properties,
     }
     
     if (ssl_config->shouldDisableCertificateVerification()) {
-      options.disable_server_verification = ssl_config->shouldDisableCertificateVerification();
-    } else {
-      if (ssl_config->useSystemTrustStore()) {
-        const std::string certs = GetCerts();
+      options.disable_server_verification = true;
+    }
 
+    // Load root certificates — needed even when verification is disabled,
+    // because gRPC may hang during TLS handshake if it can't find any
+    // root certs (e.g., /usr/share/grpc/roots.pem doesn't exist on macOS).
+    if (ssl_config->useSystemTrustStore()) {
+      options.tls_root_certs = GetCerts();
+    } else if (!ssl_config->getTrustedCerts().empty()) {
+      flight::CertKeyPair cert_key_pair;
+      ssl_config->populateOptionsWithCerts(&cert_key_pair);
+      options.tls_root_certs = cert_key_pair.pem_cert;
+    } else {
+      // Fallback: probe well-known system CA bundle paths.
+      // gRPC's compiled-in default (/usr/share/grpc/roots.pem) doesn't
+      // exist on macOS; loading system certs explicitly avoids that.
+      const std::string certs = GetCerts();
+      if (!certs.empty()) {
         options.tls_root_certs = certs;
-      } else if (!ssl_config->getTrustedCerts().empty()) {
-        flight::CertKeyPair cert_key_pair;
-        ssl_config->populateOptionsWithCerts(&cert_key_pair);
-        options.tls_root_certs = cert_key_pair.pem_cert;
-      } else {
-        // Fallback: probe well-known system CA bundle paths.
-        // gRPC's compiled-in default (/usr/share/grpc/roots.pem) doesn't
-        // exist on macOS; loading system certs explicitly avoids that.
-        const std::string certs = GetCerts();
-        if (!certs.empty()) {
-          options.tls_root_certs = certs;
-        }
       }
     }
   }
