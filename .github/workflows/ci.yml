@@ -603,7 +603,7 @@ jobs:
 
       - name: Install GizmoSQL server and pyodbc
         run: |
-          brew install gizmodata/tap/gizmosql unixodbc
+          brew install gizmodata/tap/gizmosql unixodbc libiodbc
           python3 -m venv /tmp/venv
           /tmp/venv/bin/pip install pyodbc
 
@@ -624,6 +624,7 @@ jobs:
           xattr -cr /tmp/libgizmosql-odbc.dylib
           ls -la /tmp/libgizmosql-odbc.dylib
           file /tmp/libgizmosql-odbc.dylib
+          otool -L /tmp/libgizmosql-odbc.dylib
 
       - name: Start GizmoSQL (non-TLS)
         run: |
