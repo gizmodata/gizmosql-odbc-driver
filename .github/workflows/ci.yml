@@ -616,8 +616,14 @@ jobs:
       - name: Install driver
         run: |
           DRIVER_PATH=$(find driver -name '*.dylib' -print -quit)
+          echo "Found driver at: $DRIVER_PATH"
           cp "$DRIVER_PATH" /tmp/libgizmosql-odbc.dylib
           chmod +x /tmp/libgizmosql-odbc.dylib
+          # Remove quarantine attribute — Gatekeeper blocks dlopen of
+          # unsigned code downloaded via artifact download
+          xattr -cr /tmp/libgizmosql-odbc.dylib
+          ls -la /tmp/libgizmosql-odbc.dylib
+          file /tmp/libgizmosql-odbc.dylib
 
       - name: Start GizmoSQL (non-TLS)
         run: |
