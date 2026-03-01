@@ -735,7 +735,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path "C:\temp" -Force | Out-Null
           $env:GIZMOSQL_PASSWORD = "gizmosql_password"
-          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--log-level","debug","--print-queries" -NoNewWindow -PassThru | ForEach-Object { $_.Id | Out-File C:\gizmosql.pid }
+          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--log-level","debug","--print-queries" -NoNewWindow -PassThru -RedirectStandardOutput "C:\gizmosql_stdout.log" -RedirectStandardError "C:\gizmosql_stderr.log" | ForEach-Object { $_.Id | Out-File C:\gizmosql.pid }
           # Wait for server — use 127.0.0.1 to avoid IPv6 issues
           for ($i = 1; $i -le 30; $i++) {
             try {
@@ -748,6 +748,10 @@ jobs:
               Start-Sleep -Seconds 2
             }
           }
+          # Verify server process is running
+          $pid = Get-Content C:\gizmosql.pid
+          $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+          if ($proc) { Write-Host "Server PID $pid is running" } else { Write-Host "WARNING: Server PID $pid is NOT running!" }
 
       - name: Run pyodbc integration tests (non-TLS)
         shell: pwsh
@@ -757,18 +761,37 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           pip install pyodbc
-          # Quick ODBC diagnostic
-          python -c "import pyodbc; pyodbc.pooling = False; print('Drivers:', [d for d in pyodbc.drivers()]); conn = pyodbc.connect('Driver={GizmoSQL ODBC Driver};host=127.0.0.1;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false', autocommit=True, timeout=10); print('Connected!'); cursor = conn.cursor(); cursor.execute('SELECT 42'); print('Result:', cursor.fetchone()); conn.close()" || echo "DIAG: Quick test failed"
+          # Quick ODBC diagnostic — try minimal connection without defaultCatalog
+          python -c "import pyodbc; pyodbc.pooling = False; print('Drivers:', [d for d in pyodbc.drivers()]); conn = pyodbc.connect('Driver={GizmoSQL ODBC Driver};host=127.0.0.1;port=31337;uid=gizmosql_user;pwd=gizmosql_password;useEncryption=false', autocommit=True, timeout=10); print('Connected!'); cursor = conn.cursor(); cursor.execute('SELECT 42'); print('Result:', cursor.fetchone()); conn.close()" || echo "DIAG: Quick test failed (without defaultCatalog)"
           python integration_tests/test_pyodbc.py
 
-      - name: Stop non-TLS server
+      - name: Dump server logs (non-TLS)
+        if: always()
         shell: pwsh
         run: |
-          $pid = Get-Content C:\gizmosql.pid
-          Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+          Write-Host "=== Server stdout ==="
+          if (Test-Path C:\gizmosql_stdout.log) { Get-Content C:\gizmosql_stdout.log -Tail 100 } else { Write-Host "No stdout log" }
+          Write-Host "=== Server stderr ==="
+          if (Test-Path C:\gizmosql_stderr.log) { Get-Content C:\gizmosql_stderr.log -Tail 100 } else { Write-Host "No stderr log" }
+          # Check if server is still running
+          if (Test-Path C:\gizmosql.pid) {
+            $pid = Get-Content C:\gizmosql.pid
+            $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+            if ($proc) { Write-Host "Server PID $pid still running" } else { Write-Host "Server PID $pid has EXITED" }
+          }
+
+      - name: Stop non-TLS server
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path C:\gizmosql.pid) {
+            $pid = Get-Content C:\gizmosql.pid
+            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+          }
           Start-Sleep -Seconds 1
 
       - name: Generate TLS certificate
+        if: always()
         shell: pwsh
         run: |
           # Use openssl from Git for Windows
@@ -776,10 +799,11 @@ jobs:
           & $openssl req -x509 -newkey rsa:2048 -keyout C:\server.key -out C:\server.crt -days 1 -nodes -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 
       - name: Start GizmoSQL (TLS)
+        if: always()
         shell: pwsh
         run: |
           $env:GIZMOSQL_PASSWORD = "gizmosql_password"
-          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--tls","C:\server.crt","C:\server.key","--log-level","debug","--print-queries" -NoNewWindow -PassThru | ForEach-Object { $_.Id | Out-File C:\gizmosql_tls.pid }
+          Start-Process gizmosql_server -ArgumentList "--database-filename","C:\temp\test.duckdb","--username","gizmosql_user","--tls","C:\server.crt","C:\server.key","--log-level","debug","--print-queries" -NoNewWindow -PassThru -RedirectStandardOutput "C:\gizmosql_tls_stdout.log" -RedirectStandardError "C:\gizmosql_tls_stderr.log" | ForEach-Object { $_.Id | Out-File C:\gizmosql_tls.pid }
           for ($i = 1; $i -le 30; $i++) {
             try {
               $tcp = New-Object System.Net.Sockets.TcpClient("127.0.0.1", 31337)
@@ -793,6 +817,7 @@ jobs:
           }
 
       - name: Run pyodbc TLS integration tests
+        if: always()
         timeout-minutes: 3
         shell: pwsh
         env:
@@ -802,6 +827,15 @@ jobs:
           GIZMOSQL_TRUSTED_CERTS: C:\server.crt
           PYTHONUNBUFFERED: "1"
         run: python integration_tests/test_pyodbc.py
+
+      - name: Dump server logs (TLS)
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "=== TLS Server stdout ==="
+          if (Test-Path C:\gizmosql_tls_stdout.log) { Get-Content C:\gizmosql_tls_stdout.log -Tail 100 } else { Write-Host "No TLS stdout log" }
+          Write-Host "=== TLS Server stderr ==="
+          if (Test-Path C:\gizmosql_tls_stderr.log) { Get-Content C:\gizmosql_tls_stderr.log -Tail 100 } else { Write-Host "No TLS stderr log" }
 
   sign-macos:
     needs: [build-macos, integration-test-macos]
