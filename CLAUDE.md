@@ -36,6 +36,10 @@ echo "SELECT 42 AS answer;" | isql -v "GizmoSQL Test"
 docker rm -f gizmosql-test
 ```
 
+## Versioning
+
+The driver version is defined in `CMakeLists.txt` (`GIZMOSQL_VERSION_MAJOR`/`MINOR`/`PATCH`/`TWEAK`). This flows into the Windows DLL VERSIONINFO resource (`odbc_entry/version.rc.in`) and the MSI installer version. **When tagging a new release, update `CMakeLists.txt` to match the tag** (e.g., `v1.2.0` → `MAJOR=1, MINOR=2, PATCH=0, TWEAK=0`), otherwise Windows will report the wrong version in Installed Apps.
+
 ## Architecture
 
 - `flight_sql/` — SPI layer: Arrow Flight SQL client, accessors, type conversions
