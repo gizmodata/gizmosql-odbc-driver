@@ -189,7 +189,7 @@ int main() {
 
   Connection::ConnPropertyMap properties = {
       {FlightSqlConnection::HOST, std::string("localhost")},
-      {FlightSqlConnection::PORT, std::string("32010")},
+      {FlightSqlConnection::PORT, std::string("31337")},
       {FlightSqlConnection::USER, std::string("gizmosql_user")},
       {FlightSqlConnection::PASSWORD, std::string("gizmosql_password")},
       {FlightSqlConnection::USE_ENCRYPTION, std::string("false")},

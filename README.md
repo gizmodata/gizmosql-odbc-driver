@@ -35,7 +35,7 @@ The driver is registered automatically. To create a DSN, add the following to `~
 [GizmoSQL]
 Driver        = GizmoSQL ODBC Driver
 host          = localhost
-port          = 32010
+port          = 31337
 uid           = your-username
 pwd           = your-password
 useEncryption = true

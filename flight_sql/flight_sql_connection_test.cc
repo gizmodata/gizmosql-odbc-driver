@@ -63,7 +63,7 @@ TEST(MetadataSettingsTest, StringColumnLengthTest) {
 
   const Connection::ConnPropertyMap properties = {
       {FlightSqlConnection::HOST, std::string("localhost")},  // expect not used
-      {FlightSqlConnection::PORT, std::string("32010")},  // expect not used
+      {FlightSqlConnection::PORT, std::string("31337")},  // expect not used
       {FlightSqlConnection::USE_ENCRYPTION, std::string("false")},  // expect not used
       {FlightSqlConnection::STRING_COLUMN_LENGTH, std::to_string(expected_string_column_length)},
   };
@@ -97,7 +97,7 @@ TEST(BuildLocationTests, ForTcp) {
   std::vector<std::string> missing_attr;
   Connection::ConnPropertyMap properties = {
     {FlightSqlConnection::HOST, std::string("localhost")},
-    {FlightSqlConnection::PORT, std::string("32010")},
+    {FlightSqlConnection::PORT, std::string("31337")},
     {FlightSqlConnection::USE_ENCRYPTION, std::string("false")},
   };
 
@@ -109,11 +109,11 @@ TEST(BuildLocationTests, ForTcp) {
   const Location &actual_location2 = FlightSqlConnection::BuildLocation(
     {
       {FlightSqlConnection::HOST, std::string("localhost")},
-      {FlightSqlConnection::PORT, std::string("32011")},
+      {FlightSqlConnection::PORT, std::string("31338")},
     },
     missing_attr, ssl_config);
 
-  auto expected_location_result = Location::ForGrpcTcp("localhost", 32010);
+  auto expected_location_result = Location::ForGrpcTcp("localhost", 31337);
   ASSERT_TRUE(expected_location_result.ok());
   Location expected_location = std::move(expected_location_result).ValueUnsafe();
   ASSERT_EQ(expected_location, actual_location1);
@@ -124,7 +124,7 @@ TEST(BuildLocationTests, ForTls) {
   std::vector<std::string> missing_attr;
   Connection::ConnPropertyMap properties = {
     {FlightSqlConnection::HOST, std::string("localhost")},
-    {FlightSqlConnection::PORT, std::string("32010")},
+    {FlightSqlConnection::PORT, std::string("31337")},
     {FlightSqlConnection::USE_ENCRYPTION, std::string("1")},
   };
 
@@ -136,7 +136,7 @@ TEST(BuildLocationTests, ForTls) {
 
   Connection::ConnPropertyMap second_properties = {
     {FlightSqlConnection::HOST, std::string("localhost")},
-    {FlightSqlConnection::PORT, std::string("32011")},
+    {FlightSqlConnection::PORT, std::string("31338")},
     {FlightSqlConnection::USE_ENCRYPTION, std::string("1")},
   };
 
@@ -146,7 +146,7 @@ TEST(BuildLocationTests, ForTls) {
   const Location &actual_location2 = FlightSqlConnection::BuildLocation(
     second_properties, missing_attr, ssl_config);
 
-  auto expected_location_result = Location::ForGrpcTls("localhost", 32010);
+  auto expected_location_result = Location::ForGrpcTls("localhost", 31337);
   ASSERT_TRUE(expected_location_result.ok());
   Location expected_location = std::move(expected_location_result).ValueUnsafe();
   ASSERT_EQ(expected_location, actual_location1);

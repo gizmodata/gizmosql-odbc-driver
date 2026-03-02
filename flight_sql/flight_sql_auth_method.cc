@@ -287,7 +287,7 @@ std::unique_ptr<FlightSqlAuthMethod> FlightSqlAuthMethod::FromProperties(
     auto it_host = properties.find(FlightSqlConnection::HOST);
     auto it_port = properties.find(FlightSqlConnection::PORT);
     const std::string &host = it_host != properties.end() ? it_host->second : "localhost";
-    int port = it_port != properties.end() ? std::stoi(it_port->second) : 32010;
+    int port = it_port != properties.end() ? std::stoi(it_port->second) : 31337;
 
     auto it_encryption = properties.find(FlightSqlConnection::USE_ENCRYPTION);
     bool use_encryption = true;

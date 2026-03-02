@@ -88,7 +88,7 @@ Driver = /path/to/libgizmosql-odbc.dylib   # or .so on Linux
 [GizmoSQL]
 Driver              = GizmoSQL ODBC Driver
 host                = gizmosql.example.com
-port                = 32010
+port                = 31337
 uid                 = my-user
 pwd                 = my-password
 useEncryption       = true
@@ -110,7 +110,7 @@ The driver's DSN configuration dialog has two tabs:
 Connection strings use semicolon-delimited key=value pairs:
 
 ```
-Driver=GizmoSQL ODBC Driver;host=gizmosql.example.com;port=32010;uid=user;pwd=pass;useEncryption=true
+Driver=GizmoSQL ODBC Driver;host=gizmosql.example.com;port=31337;uid=user;pwd=pass;useEncryption=true
 ```
 
 Values containing semicolons or braces can be enclosed in braces: `pwd={p@ss;word}`.
