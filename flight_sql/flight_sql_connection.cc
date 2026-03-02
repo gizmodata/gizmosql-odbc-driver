@@ -425,12 +425,13 @@ FlightSqlConnection::BuildFlightClientOptions(const ConnPropertyMap &properties,
     // Load root certificates — needed even when verification is disabled,
     // because gRPC may hang during TLS handshake if it can't find any
     // root certs (e.g., /usr/share/grpc/roots.pem doesn't exist on macOS).
-    if (ssl_config->useSystemTrustStore()) {
-      options.tls_root_certs = GetCerts();
-    } else if (!ssl_config->getTrustedCerts().empty()) {
+    // Explicit trustedCerts takes priority over system trust store.
+    if (!ssl_config->getTrustedCerts().empty()) {
       flight::CertKeyPair cert_key_pair;
       ssl_config->populateOptionsWithCerts(&cert_key_pair);
       options.tls_root_certs = cert_key_pair.pem_cert;
+    } else if (ssl_config->useSystemTrustStore()) {
+      options.tls_root_certs = GetCerts();
     } else {
       // Fallback: probe well-known system CA bundle paths.
       // gRPC's compiled-in default (/usr/share/grpc/roots.pem) doesn't
