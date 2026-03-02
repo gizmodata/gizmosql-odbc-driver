@@ -117,6 +117,29 @@ void OAuthDiscoveryMiddlewareFactory::SetDiscoveredUrl(
 // ── Internal auth methods ────────────────────────────────────────────────────
 
 namespace {
+
+/// Throw a user-friendly CommunicationException for gRPC transport errors.
+/// Raw gRPC messages like "Could not finish writing before closing" are
+/// cryptic — wrap them with actionable guidance.
+[[noreturn]] void ThrowConnectionError(const arrow::Status &status) {
+  const std::string &msg = status.message();
+
+  // Detect TLS-related errors
+  if (msg.find("SSL_ERROR_SSL") != std::string::npos ||
+      msg.find("ssl_transport_security") != std::string::npos ||
+      msg.find("certificate verify failed") != std::string::npos ||
+      msg.find("wrong version number") != std::string::npos) {
+    throw CommunicationException(
+        "TLS handshake failed. Check that useEncryption matches the server's "
+        "TLS configuration, and that trustedCerts points to the correct "
+        "certificate file. Detail: " + msg);
+  }
+
+  // Generic transport/connection errors
+  throw CommunicationException(
+      "Failed to connect to the server. Verify the host and port are correct "
+      "and the server is running. Detail: " + msg);
+}
 class NoOpClientAuthHandler : public arrow::flight::ClientAuthHandler {
 public:
   NoOpClientAuthHandler() {}
@@ -167,7 +190,7 @@ public:
         }
       }
 
-      throw odbcabstraction::DriverException(bearer_result.status().message());
+      ThrowConnectionError(bearer_result.status());
     }
 
     call_options.headers.push_back(bearer_result.ValueOrDie());
@@ -204,7 +227,7 @@ private:
                       throw CommunicationException(status.message());
                     }
                 }
-                throw odbcabstraction::DriverException(status.message());
+                ThrowConnectionError(status);
             }
         }
     };
