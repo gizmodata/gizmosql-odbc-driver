@@ -11,6 +11,7 @@
 
 #include "gtest/gtest.h"
 #include <arrow/flight/types.h>
+#include <odbcabstraction/exceptions.h>
 
 namespace driver {
 namespace flight_sql {
@@ -230,6 +231,40 @@ TEST(AutocommitTests, EndTransactionNoOpWhenNoTransaction) {
   connection.EndTransaction(false);
 
   connection.Close();
+}
+
+TEST(ConnectionErrorTests, ConnectToNonExistentServerGivesUserFriendlyError) {
+  FlightSqlConnection connection(odbcabstraction::V_3);
+
+  // Use a port where no server is running
+  Connection::ConnPropertyMap properties = {
+    {FlightSqlConnection::HOST, std::string("127.0.0.1")},
+    {FlightSqlConnection::PORT, std::string("19999")},
+    {FlightSqlConnection::USE_ENCRYPTION, std::string("false")},
+    {FlightSqlConnection::USER, std::string("user")},
+    {FlightSqlConnection::PASSWORD, std::string("pass")},
+  };
+  // Set a short login timeout so the test doesn't hang
+  connection.SetAttribute(Connection::LOGIN_TIMEOUT, static_cast<uint32_t>(3));
+
+  std::vector<std::string> missing_attr;
+  try {
+    connection.Connect(properties, missing_attr);
+    FAIL() << "Expected exception when connecting to non-existent server";
+  } catch (const odbcabstraction::CommunicationException &e) {
+    // Should be a CommunicationException with actionable message
+    std::string msg = e.GetMessageText();
+    EXPECT_NE(msg.find("Verify the host and port"), std::string::npos)
+        << "Error message should contain actionable guidance, got: " << msg;
+    EXPECT_EQ(e.GetSqlState(), "08S01")
+        << "SQLSTATE should be 08S01 (Communication link failure)";
+  } catch (const std::exception &e) {
+    // If it's a different exception type, that's also OK as long as
+    // it's not the raw gRPC message
+    std::string msg = e.what();
+    EXPECT_EQ(msg.find("Could not finish writing"), std::string::npos)
+        << "Raw gRPC error should not be exposed to users, got: " << msg;
+  }
 }
 
 } // namespace flight_sql
