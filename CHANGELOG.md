@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v1.1.3] - 2026-07-22
+
 ### Fixed
 - MSI installer: allow same-version upgrades (`AllowSameVersionUpgrades="yes"` on `MajorUpgrade`) so reinstalling or re-releasing the same version replaces the existing install instead of creating a side-by-side entry in Installed Apps.
 - MSI installer: banner and dialog bitmaps no longer squish the square GizmoSQL logo into 4:1 boxes. The logo is now drawn with preserved aspect ratio — small on the right side of the banner (the WiX page title overlays the left) and in the left strip of the welcome/completion dialog.
